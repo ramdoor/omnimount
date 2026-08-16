@@ -22,7 +22,7 @@ struct FormatSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("Formatear partición", systemImage: "exclamationmark.triangle.fill")
+            Label(L10n.t("Formatear partición", "Format partition"), systemImage: "exclamationmark.triangle.fill")
                 .font(.headline)
                 .foregroundStyle(.red)
 
@@ -30,34 +30,34 @@ struct FormatSheet: View {
                 .font(.body.bold())
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("⚠️ Esta operación BORRARÁ TODOS LOS DATOS de la partición de forma permanente. No se puede deshacer.")
-                Text("Si la tarjeta es de una consola (ArkOS, Batocera…), formatear la partición equivocada puede dejarla sin arrancar. Haz antes una copia con `omnimount clone`.")
+                Text(L10n.t("⚠️ Esta operación BORRARÁ TODOS LOS DATOS de la partición de forma permanente. No se puede deshacer.", "⚠️ This operation will PERMANENTLY ERASE ALL DATA on the partition. It cannot be undone."))
+                Text(L10n.t("Si la tarjeta es de una consola (ArkOS, Batocera…), formatear la partición equivocada puede dejarla sin arrancar. Haz antes una copia con `omnimount clone`.", "If this card belongs to a console (ArkOS, Batocera…), formatting the wrong partition can make it unbootable. Back it up first with `omnimount clone`."))
             }
             .font(.callout)
             .foregroundStyle(.red)
             .padding(10)
             .background(.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
 
-            Picker("Formato", selection: $selectedFormat) {
+            Picker(L10n.t("Formato", "Format"), selection: $selectedFormat) {
                 ForEach(TargetFormat.allCases) { format in
                     Text(format.displayName).tag(format)
                 }
             }
 
-            TextField("Etiqueta del volumen", text: $label)
+            TextField(L10n.t("Etiqueta del volumen", "Volume label"), text: $label)
                 .textFieldStyle(.roundedBorder)
 
-            Toggle("Entiendo que se borrará todo el contenido de \(partition.deviceIdentifier)", isOn: $confirmed)
+            Toggle(L10n.t("Entiendo que se borrará todo el contenido de \(partition.deviceIdentifier)", "I understand all content of \(partition.deviceIdentifier) will be erased"), isOn: $confirmed)
                 .font(.callout)
 
             HStack {
-                Button("Cancelar") { dismiss() }
+                Button(L10n.t("Cancelar", "Cancel")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Spacer()
                 if working {
                     ProgressView().controlSize(.small)
                 }
-                Button("Formatear (borra todo)", role: .destructive) {
+                Button(L10n.t("Formatear (borra todo)", "Format (erases everything)"), role: .destructive) {
                     working = true
                     mountController.format(partition,
                                            as: selectedFormat.rawValue,

@@ -11,12 +11,12 @@ public enum TargetFormat: String, CaseIterable, Sendable, Identifiable {
 
     public var displayName: String {
         switch self {
-        case .ext4: return "ext4 (Linux/consolas retro)"
+        case .ext4: return L10n.t("ext4 (Linux/consolas retro)", "ext4 (Linux/retro consoles)")
         case .ext3: return "ext3"
         case .ext2: return "ext2"
         case .ntfs: return "NTFS (Windows)"
-        case .fat32: return "FAT32 (compatible con todo, ficheros <4 GB)"
-        case .exfat: return "exFAT (compatible, sin límite de 4 GB)"
+        case .fat32: return L10n.t("FAT32 (compatible con todo, ficheros <4 GB)", "FAT32 (works everywhere, files <4 GB)")
+        case .exfat: return L10n.t("exFAT (compatible, sin límite de 4 GB)", "exFAT (compatible, no 4 GB limit)")
         }
     }
 
@@ -40,15 +40,15 @@ public enum FormatError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .notRoot:
-            return "Formatear requiere privilegios de root."
+            return L10n.t("Formatear requiere privilegios de root.", "Formatting requires root privileges.")
         case .toolMissing(let tool):
-            return "No se encontró \(tool). Revisa `omnimount doctor`."
+            return L10n.t("No se encontró \(tool). Revisa `omnimount doctor`.", "\(tool) not found. Check `omnimount doctor`.")
         case .unmountFailed(let message):
-            return "No se pudo desmontar antes de formatear: \(message)"
+            return L10n.t("No se pudo desmontar antes de formatear: \(message)", "Could not unmount before formatting: \(message)")
         case .formatFailed(let tool, let output):
-            return "\(tool) falló: \(output)"
+            return L10n.t("\(tool) falló: \(output)", "\(tool) failed: \(output)")
         case .badLabel(let reason):
-            return "Etiqueta no válida: \(reason)"
+            return L10n.t("Etiqueta no válida: \(reason)", "Invalid label: \(reason)")
         }
     }
 }

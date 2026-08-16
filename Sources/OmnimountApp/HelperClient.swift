@@ -82,14 +82,14 @@ final class HelperClient: ObservableObject {
         }
 
         guard let proxy = connection.remoteObjectProxyWithErrorHandler({ error in
-            finish(false, "El helper no responde: \(error.localizedDescription)")
+            finish(false, L10n.t("El helper no responde: \(error.localizedDescription)", "The helper is not responding: \(error.localizedDescription)"))
         }) as? OmnimountHelperProtocol else {
-            finish(false, "No se pudo crear el proxy XPC.")
+            finish(false, L10n.t("No se pudo crear el proxy XPC.", "Could not create the XPC proxy."))
             return
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
-            finish(false, "El helper no respondió a tiempo.")
+            finish(false, L10n.t("El helper no respondió a tiempo.", "The helper did not respond in time."))
         }
         body(proxy) { ok, message in finish(ok, message) }
     }

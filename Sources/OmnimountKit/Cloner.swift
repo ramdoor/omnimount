@@ -21,18 +21,18 @@ public enum CloneError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .notRoot:
-            return "Clonar/restaurar accede al dispositivo en bruto: ejecuta con sudo."
+            return L10n.t("Clonar/restaurar accede al dispositivo en bruto: ejecuta con sudo.", "Cloning/restoring accesses the raw device: run with sudo.")
         case .cannotOpen(let path):
-            return "No se pudo abrir \(path)."
+            return L10n.t("No se pudo abrir \(path).", "Could not open \(path).")
         case .sizeUnknown(let disk):
-            return "No se pudo determinar el tamaño de \(disk)."
+            return L10n.t("No se pudo determinar el tamaño de \(disk).", "Could not determine the size of \(disk).")
         case .imageLargerThanTarget(let image, let target):
             let f = ByteCountFormatter()
-            return "La imagen (\(f.string(fromByteCount: image))) no cabe en el destino (\(f.string(fromByteCount: target)))."
+            return L10n.t("La imagen (\(f.string(fromByteCount: image))) no cabe en el destino (\(f.string(fromByteCount: target))).", "The image (\(f.string(fromByteCount: image))) does not fit in the target (\(f.string(fromByteCount: target))).")
         case .unmountFailed(let message):
-            return "No se pudo desmontar el disco antes de la operación: \(message)"
+            return L10n.t("No se pudo desmontar el disco antes de la operación: \(message)", "Could not unmount the disk before the operation: \(message)")
         case .ioError(let message):
-            return "Error de E/S: \(message)"
+            return L10n.t("Error de E/S: \(message)", "I/O error: \(message)")
         }
     }
 }

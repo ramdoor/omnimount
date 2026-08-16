@@ -26,7 +26,7 @@ struct MenuContentView: View {
             }
 
             if monitor.disks.isEmpty {
-                Text("No hay discos externos conectados.")
+                Text(L10n.t("No hay discos externos conectados.", "No external disks connected."))
                     .foregroundStyle(.secondary)
                     .font(.callout)
             } else {
@@ -56,13 +56,13 @@ struct MenuContentView: View {
             dependencyStatus
 
             HStack {
-                Button("Actualizar") { monitor.refresh() }
-                Button("Configuración…") {
+                Button(L10n.t("Actualizar", "Refresh")) { monitor.refresh() }
+                Button(L10n.t("Configuración…", "Setup…")) {
                     openWindow(id: "setup")
                     NSApp.activate(ignoringOtherApps: true)
                 }
                 Spacer()
-                Button("Salir") { NSApplication.shared.terminate(nil) }
+                Button(L10n.t("Salir", "Quit")) { NSApplication.shared.terminate(nil) }
             }
             .buttonStyle(.borderless)
             .font(.callout)
@@ -81,29 +81,29 @@ struct MenuContentView: View {
     private var helperStatus: some View {
         switch mountController.helper.state {
         case .enabled:
-            Label("Helper activo: montaje sin contraseñas", systemImage: "bolt.badge.checkmark")
+            Label(L10n.t("Helper activo: montaje sin contraseñas", "Helper active: password-free mounting"), systemImage: "bolt.badge.checkmark")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         case .requiresApproval:
             VStack(alignment: .leading, spacing: 4) {
-                Label("Falta aprobar el helper en Ajustes → Elementos de inicio", systemImage: "clock.badge.exclamationmark")
+                Label(L10n.t("Falta aprobar el helper en Ajustes → Elementos de inicio", "Approve the helper in Settings → Login Items"), systemImage: "clock.badge.exclamationmark")
                     .font(.caption)
                     .foregroundStyle(.orange)
-                Button("Abrir Ajustes") { SMAppService.openSystemSettingsLoginItems() }
+                Button(L10n.t("Abrir Ajustes", "Open Settings")) { SMAppService.openSystemSettingsLoginItems() }
                     .controlSize(.small)
             }
         case .notRegistered:
             VStack(alignment: .leading, spacing: 4) {
-                Label("Activa el helper para montar sin contraseñas", systemImage: "bolt.slash")
+                Label(L10n.t("Activa el helper para montar sin contraseñas", "Enable the helper to mount without passwords"), systemImage: "bolt.slash")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Button("Activar helper") {
+                Button(L10n.t("Activar helper", "Enable helper")) {
                     mountController.helper.install()
                 }
                 .controlSize(.small)
             }
         case .unavailable(let reason):
-            Label("Helper no disponible: \(reason)", systemImage: "xmark.octagon")
+            Label(L10n.t("Helper no disponible: \(reason)", "Helper unavailable: \(reason)"), systemImage: "xmark.octagon")
                 .font(.caption)
                 .foregroundStyle(.red)
                 .lineLimit(3)
@@ -114,22 +114,22 @@ struct MenuContentView: View {
     private var dependencyStatus: some View {
         let d = diagnosis
         if d.canMountExt && d.canMountNTFS && mountController.isCLIInstalled {
-            Label("Dependencias correctas", systemImage: "checkmark.circle")
+            Label(L10n.t("Dependencias correctas", "All dependencies OK"), systemImage: "checkmark.circle")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         } else {
             VStack(alignment: .leading, spacing: 2) {
                 if !d.hasFuseLayer {
-                    Label("Falta la capa FUSE (abre Configuración…)", systemImage: "exclamationmark.triangle")
+                    Label(L10n.t("Falta la capa FUSE (abre Configuración…)", "FUSE layer missing (open Setup…)"), systemImage: "exclamationmark.triangle")
                 }
                 if d.fuse2fs == nil {
-                    Label("Falta fuse2fs (scripts/build-fuse2fs.sh)", systemImage: "exclamationmark.triangle")
+                    Label(L10n.t("Falta fuse2fs (scripts/build-fuse2fs.sh)", "fuse2fs missing (scripts/build-fuse2fs.sh)"), systemImage: "exclamationmark.triangle")
                 }
                 if d.ntfs3g == nil {
-                    Label("Falta ntfs-3g (brew install gromgit/fuse/ntfs-3g-mac)", systemImage: "exclamationmark.triangle")
+                    Label(L10n.t("Falta ntfs-3g (brew install gromgit/fuse/ntfs-3g-mac)", "ntfs-3g missing (brew install gromgit/fuse/ntfs-3g-mac)"), systemImage: "exclamationmark.triangle")
                 }
                 if !mountController.isCLIInstalled {
-                    Label("Falta el CLI omnimount (make install)", systemImage: "exclamationmark.triangle")
+                    Label(L10n.t("Falta el CLI omnimount (make install)", "omnimount CLI missing (make install)"), systemImage: "exclamationmark.triangle")
                 }
             }
             .font(.caption)
@@ -186,18 +186,18 @@ private struct PartitionRow: View {
                 } label: {
                     Image(systemName: "folder")
                 }
-                .help("Mostrar en Finder")
-                Button("Expulsar") {
+                .help(L10n.t("Mostrar en Finder", "Reveal in Finder"))
+                Button(L10n.t("Expulsar", "Eject")) {
                     mountController.unmount(partition) { monitor.refresh() }
                 }
             } else {
-                Button("Montar") {
+                Button(L10n.t("Montar", "Mount")) {
                     mountController.mount(partition) { monitor.refresh() }
                 }
             }
 
             Menu {
-                Button("Formatear…", role: .destructive) {
+                Button(L10n.t("Formatear…", "Format…"), role: .destructive) {
                     mountController.formatTarget = partition
                 }
             } label: {
@@ -205,7 +205,7 @@ private struct PartitionRow: View {
             }
             .menuStyle(.borderlessButton)
             .frame(width: 24)
-            .help("Más acciones")
+            .help(L10n.t("Más acciones", "More actions"))
         }
         .buttonStyle(.bordered)
         .controlSize(.small)

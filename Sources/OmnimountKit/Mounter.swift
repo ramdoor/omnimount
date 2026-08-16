@@ -12,19 +12,19 @@ public enum MountError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .notRoot:
-            return "Montar requiere privilegios de root. Ejecuta el comando con sudo."
+            return L10n.t("Montar requiere privilegios de root. Ejecuta el comando con sudo.", "Mounting requires root privileges. Run the command with sudo.")
         case .macFUSEMissing:
-            return "No hay capa FUSE instalada. Recomendado: brew install --cask macos-fuse-t/cask/fuse-t (sin kext). Alternativa: brew install --cask macfuse."
+            return L10n.t("No hay capa FUSE instalada. Recomendado: brew install --cask macos-fuse-t/cask/fuse-t (sin kext). Alternativa: brew install --cask macfuse.", "No FUSE layer installed. Recommended: brew install --cask macos-fuse-t/cask/fuse-t (kext-free). Alternative: brew install --cask macfuse.")
         case .toolMissing(let tool):
-            return "No se encontró \(tool.rawValue). Consulta el README para instalarlo."
+            return L10n.t("No se encontró \(tool.rawValue). Consulta el README para instalarlo.", "\(tool.rawValue) not found. See the README to install it.")
         case .unsupportedFilesystem(let fs):
-            return "Omnimount no puede montar \(fs.displayName)."
+            return L10n.t("Omnimount no puede montar \(fs.displayName).", "Omnimount cannot mount \(fs.displayName).")
         case .mountFailed(let tool, let stderr):
-            return "\(tool) falló al montar: \(stderr)"
+            return L10n.t("\(tool) falló al montar: \(stderr)", "\(tool) failed to mount: \(stderr)")
         case .unmountFailed(let message):
-            return "No se pudo desmontar: \(message)"
+            return L10n.t("No se pudo desmontar: \(message)", "Could not unmount: \(message)")
         case .fsckFailed(let message):
-            return "La verificación (fsck) encontró problemas: \(message)"
+            return L10n.t("La verificación (fsck) encontró problemas: \(message)", "Verification (fsck) found problems: \(message)")
         }
     }
 }
@@ -116,10 +116,7 @@ public enum Mounter {
             try? FileManager.default.removeItem(atPath: mountPoint)
             throw MountError.mountFailed(
                 tool: tool.rawValue,
-                stderr: "\(tool.rawValue) terminó sin error pero el volumen no aparece montado. "
-                    + "Causa habitual: la extensión de kernel de macFUSE está bloqueada — "
-                    + "apruébala en Ajustes del Sistema → Privacidad y seguridad y reinicia. "
-                    + "Salida: \(result.stdout) \(result.stderr)")
+                stderr: L10n.t("\(tool.rawValue) terminó sin error pero el volumen no aparece montado. Causa habitual: la capa FUSE no está operativa (kext bloqueado o instalación incompleta). Salida: \(result.stdout) \(result.stderr)", "\(tool.rawValue) exited cleanly but the volume is not mounted. Usual cause: the FUSE layer is not operational (blocked kext or incomplete install). Output: \(result.stdout) \(result.stderr)"))
         }
 
         return MountResult(

@@ -19,7 +19,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
         guard let part = try DiskLister.externalDisks()
             .flatMap(\.partitions)
             .first(where: { $0.deviceIdentifier == id }) else {
-            throw MountError.unmountFailed("No existe la partición externa \(id)")
+            throw MountError.unmountFailed(L10n.t("No existe la partición externa \(id)", "External partition \(id) does not exist"))
         }
         return part
     }
@@ -59,7 +59,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
                 guard let current = part.mountPoint
                     ?? Mounter.currentMountPoint(devicePath: part.devicePath)
                     ?? Mounter.derivedMountPoint(partition: part) else {
-                    reply(false, "\(target) no está montada.")
+                    reply(false, L10n.t("\(target) no está montada.", "\(target) is not mounted."))
                     return
                 }
                 mountPoint = current
@@ -74,7 +74,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
     func format(deviceIdentifier: String, filesystem: String, label: String,
                 reply: @escaping (Bool, String) -> Void) {
         guard let target = TargetFormat(rawValue: filesystem) else {
-            reply(false, "Formato desconocido: \(filesystem)")
+            reply(false, L10n.t("Formato desconocido: \(filesystem)", "Unknown format: \(filesystem)"))
             return
         }
         do {
@@ -100,7 +100,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
     private static func friendlyMessage(_ error: Error) -> String {
         let message = error.localizedDescription
         if error is DetectionError {
-            return message + " Si el helper está activo, concede Acceso total al disco a OmnimountHelper en Ajustes → Privacidad y seguridad."
+            return message + " " + L10n.t("Si el helper está activo, concede Acceso total al disco a OmnimountHelper en Ajustes → Privacidad y seguridad.", "If the helper is enabled, grant Full Disk Access to OmnimountHelper in System Settings → Privacy & Security.")
         }
         return message
     }
