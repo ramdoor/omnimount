@@ -5,6 +5,7 @@ import OmnimountKit
 struct MenuContentView: View {
     @EnvironmentObject private var monitor: DiskMonitor
     @EnvironmentObject private var mountController: MountController
+    @Environment(\.openWindow) private var openWindow
 
     private var diagnosis: ToolLocator.Diagnosis { ToolLocator.diagnose() }
 
@@ -56,6 +57,10 @@ struct MenuContentView: View {
 
             HStack {
                 Button("Actualizar") { monitor.refresh() }
+                Button("Configuración…") {
+                    openWindow(id: "setup")
+                    NSApp.activate(ignoringOtherApps: true)
+                }
                 Spacer()
                 Button("Salir") { NSApplication.shared.terminate(nil) }
             }
@@ -114,8 +119,8 @@ struct MenuContentView: View {
                 .foregroundStyle(.secondary)
         } else {
             VStack(alignment: .leading, spacing: 2) {
-                if !d.macFUSE {
-                    Label("Falta macFUSE (brew install --cask macfuse)", systemImage: "exclamationmark.triangle")
+                if !d.hasFuseLayer {
+                    Label("Falta la capa FUSE (abre Configuración…)", systemImage: "exclamationmark.triangle")
                 }
                 if d.fuse2fs == nil {
                     Label("Falta fuse2fs (scripts/build-fuse2fs.sh)", systemImage: "exclamationmark.triangle")

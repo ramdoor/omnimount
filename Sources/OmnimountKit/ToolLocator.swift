@@ -60,35 +60,50 @@ public enum ToolLocator {
         // la app "Omnimount" se encontraría a sí misma y se relanzaría en bucle.
         let selfPath = URL(fileURLWithPath: CommandLine.arguments[0])
             .resolvingSymlinksInPath().path.lowercased()
+        // El CLI embebido en el bundle se llama "omnimount-cli" porque no puede
+        // convivir con el ejecutable "Omnimount" en un FS case-insensitive.
+        var names = [tool.rawValue]
+        if tool == .omnimountCLI { names.insert("omnimount-cli", at: 0) }
+
         for dir in directories {
-            let path = (dir as NSString).appendingPathComponent(tool.rawValue)
-            guard fm.isExecutableFile(atPath: path) else { continue }
-            let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath().path.lowercased()
-            if resolved == selfPath { continue }
-            return path
+            for name in names {
+                let path = (dir as NSString).appendingPathComponent(name)
+                guard fm.isExecutableFile(atPath: path) else { continue }
+                let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath().path.lowercased()
+                if resolved == selfPath { continue }
+                return path
+            }
         }
         return nil
     }
 
-    /// true si macFUSE está instalado (necesario para fuse2fs y ntfs-3g).
+    /// true si macFUSE está instalado (backend con kext).
     public static var isMacFUSEInstalled: Bool {
         FileManager.default.fileExists(atPath: "/Library/Filesystems/macfuse.fs")
     }
 
+    /// true si FUSE-T está instalado (backend sin kext).
+    public static var isFuseTInstalled: Bool {
+        FileManager.default.fileExists(atPath: "/usr/local/lib/libfuse-t.dylib")
+    }
+
     public struct Diagnosis: Sendable {
         public let macFUSE: Bool
+        public let fuseT: Bool
         public let fuse2fs: String?
         public let ntfs3g: String?
         public let e2fsck: String?
         public let ntfsfix: String?
 
-        public var canMountExt: Bool { macFUSE && fuse2fs != nil }
-        public var canMountNTFS: Bool { macFUSE && ntfs3g != nil }
+        public var hasFuseLayer: Bool { macFUSE || fuseT }
+        public var canMountExt: Bool { hasFuseLayer && fuse2fs != nil }
+        public var canMountNTFS: Bool { hasFuseLayer && ntfs3g != nil }
     }
 
     public static func diagnose() -> Diagnosis {
         Diagnosis(
             macFUSE: isMacFUSEInstalled,
+            fuseT: isFuseTInstalled,
             fuse2fs: find(.fuse2fs),
             ntfs3g: find(.ntfs3g),
             e2fsck: find(.e2fsck),

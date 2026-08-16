@@ -468,9 +468,13 @@ struct Doctor: ParsableCommand {
                 print("✗ \(name): no encontrado — \(hint)")
             }
         }
-        print(d.macFUSE
-              ? "✓ macFUSE instalado (/Library/Filesystems/macfuse.fs)"
-              : "✗ macFUSE: no instalado — brew install --cask macfuse y aprueba la extensión en Ajustes del Sistema")
+        if d.fuseT {
+            print("✓ Capa FUSE: FUSE-T (sin kext)")
+        } else if d.macFUSE {
+            print("✓ Capa FUSE: macFUSE (kext)")
+        } else {
+            print("✗ Capa FUSE: ninguna — recomendado: brew install --cask macos-fuse-t/cask/fuse-t")
+        }
         line("fuse2fs (ext2/3/4)", d.fuse2fs, hint: "compílalo con scripts/build-fuse2fs.sh (ver README)")
         line("ntfs-3g (NTFS)", d.ntfs3g, hint: "brew install gromgit/fuse/ntfs-3g-mac")
         line("e2fsck (verificación ext)", d.e2fsck, hint: "brew install e2fsprogs")

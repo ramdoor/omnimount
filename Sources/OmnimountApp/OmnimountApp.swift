@@ -25,6 +25,12 @@ struct OmnimountApp: App {
                 .environmentObject(mountController)
         }
         .menuBarExtraStyle(.window)
+
+        Window("Configuración de Omnimount", id: "setup") {
+            SetupView()
+                .environmentObject(mountController)
+        }
+        .windowResizability(.contentSize)
     }
 }
 

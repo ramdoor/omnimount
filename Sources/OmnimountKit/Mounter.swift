@@ -14,7 +14,7 @@ public enum MountError: Error, LocalizedError {
         case .notRoot:
             return "Montar requiere privilegios de root. Ejecuta el comando con sudo."
         case .macFUSEMissing:
-            return "macFUSE no está instalado. Instálalo con: brew install --cask macfuse (y aprueba la extensión en Ajustes del Sistema → Privacidad y seguridad)."
+            return "No hay capa FUSE instalada. Recomendado: brew install --cask macos-fuse-t/cask/fuse-t (sin kext). Alternativa: brew install --cask macfuse."
         case .toolMissing(let tool):
             return "No se encontró \(tool.rawValue). Consulta el README para instalarlo."
         case .unsupportedFilesystem(let fs):
@@ -62,7 +62,9 @@ public enum Mounter {
         }
 
         guard isRoot else { throw MountError.notRoot }
-        guard ToolLocator.isMacFUSEInstalled else { throw MountError.macFUSEMissing }
+        guard ToolLocator.isFuseTInstalled || ToolLocator.isMacFUSEInstalled else {
+            throw MountError.macFUSEMissing
+        }
 
         let tool: ExternalTool
         switch detection.filesystem {

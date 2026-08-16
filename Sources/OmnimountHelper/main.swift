@@ -86,6 +86,15 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
         }
     }
 
+    func checkFullDiskAccess(reply: @escaping (Bool) -> Void) {
+        // La base de datos TCC del sistema solo es legible con Acceso total
+        // al disco: el intento de lectura es el autotest perfecto (incluso
+        // siendo root).
+        let probe = FileHandle(forReadingAtPath: "/Library/Application Support/com.apple.TCC/TCC.db")
+        defer { try? probe?.close() }
+        reply(probe != nil)
+    }
+
     /// Errores con guía: el caso estrella es el TCC (Acceso total al disco),
     /// que al helper le toca pedir por su cuenta la primera vez.
     private static func friendlyMessage(_ error: Error) -> String {

@@ -116,4 +116,16 @@ final class HelperClient: ObservableObject {
                          filesystem: filesystem, label: label, reply: finish)
         }, completion: completion)
     }
+
+    /// Autotest de Acceso total al disco del helper.
+    /// completion(alcanzable, tieneFDA)
+    func checkFullDiskAccess(completion: @escaping (Bool, Bool) -> Void) {
+        withHelper(timeout: 10, { proxy, finish in
+            proxy.checkFullDiskAccess { hasAccess in
+                finish(true, hasAccess ? "1" : "0")
+            }
+        }, completion: { reachable, payload in
+            completion(reachable, payload == "1")
+        })
+    }
 }

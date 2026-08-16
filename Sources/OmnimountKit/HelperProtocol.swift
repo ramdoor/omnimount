@@ -37,4 +37,8 @@ public enum HelperConstants {
     /// filesystem: rawValue de TargetFormat (ext4, ntfs, fat32, exfat…).
     func format(deviceIdentifier: String, filesystem: String, label: String,
                 reply: @escaping (Bool, String) -> Void)
+
+    /// Autotest: ¿tiene el helper Acceso total al disco (TCC)?
+    /// Sin él, todas las operaciones de disco fallarán con EPERM.
+    func checkFullDiskAccess(reply: @escaping (Bool) -> Void)
 }

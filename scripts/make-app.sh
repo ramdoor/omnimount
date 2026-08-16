@@ -62,10 +62,21 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
+# Binarios autocontenidos: el CLI y fuse2fs viajan dentro del bundle
+# (ToolLocator busca junto al ejecutable). Así el .pkg solo instala la app.
+cp "$SCRATCH/release/omnimount" "$APP/Contents/MacOS/omnimount-cli"
+if [ -f "$REPO_DIR/vendor/bin/fuse2fs" ]; then
+    cp "$REPO_DIR/vendor/bin/fuse2fs" "$APP/Contents/MacOS/fuse2fs"
+else
+    echo "AVISO: vendor/bin/fuse2fs no existe (ejecuta 'make fuse2fs'); el bundle no incluirá fuse2fs."
+fi
+
 # Con una identidad estable el TCC de la app sobrevive a recompilaciones;
 # si no hay ninguna, firma ad-hoc (el helper XPC rechaza clientes sin Team ID).
 SIGN_ID="$(security find-identity -v -p codesigning 2>/dev/null | awk -F '"' 'NR==1 {print $2}')"
 codesign --force --identifier org.omnimount.helper --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/OmnimountHelper"
+codesign --force --identifier org.omnimount.cli --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/omnimount-cli"
+[ -f "$APP/Contents/MacOS/fuse2fs" ] && codesign --force --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/fuse2fs"
 codesign --force --sign "${SIGN_ID:--}" "$APP"
 echo ""
 echo "==> Creado $APP"
