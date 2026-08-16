@@ -155,7 +155,7 @@
     <h1 data-i18n-html="hero_h1">Tu Mac por fin lee <span class="ok">cualquier disco</span></h1>
     <p class="sub" data-i18n="hero_sub">Monta, escribe, formatea y clona particiones ext4 y NTFS desde la barra de menú. Sin extensiones del kernel, sin tocar la seguridad del sistema y sin contraseñas en cada montaje.</p>
     <div class="cta">
-      <a class="btn btn-buy" href="__CHECKOUT_URL__" data-i18n="cta_buy">Comprar — 9,99 €</a>
+      <a class="btn btn-buy" href="#" onclick="buyOmnimount(event)" data-i18n="cta_buy">Comprar — 9,99 €</a>
       <a class="btn btn-ghost" href="https://github.com/ramdoor/omnimount" data-i18n="cta_free">Compílalo gratis (GPL)</a>
       <small data-i18n="cta_note">Pago único · instalador firmado y notarizado por Apple · el código es open source</small>
     </div>
@@ -225,7 +225,7 @@
         <li data-i18n="p3">Actualizaciones de la versión 1.x</li>
         <li data-i18n="p4">Soporte por email</li>
       </ul>
-      <a class="btn btn-buy" href="__CHECKOUT_URL__" data-i18n="cta_buy2">Comprar Omnimount</a>
+      <a class="btn btn-buy" href="#" onclick="buyOmnimount(event)" data-i18n="cta_buy2">Comprar Omnimount</a>
     </div>
     <div class="price">
       <h3 data-i18n="oss_t">Open source</h3>
@@ -327,6 +327,38 @@ function setLang(lang){
 
 const saved = (() => { try { return localStorage.getItem("omnimount-lang"); } catch(e) { return null; } })();
 setLang(saved || (navigator.language && navigator.language.startsWith("es") ? "es" : "en"));
+</script>
+
+<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+<script>
+// --- Configuración de Paddle ---
+// PADDLE_TOKEN: client-side token (Developer Tools > Authentication).
+// PADDLE_ENV: "sandbox" para pruebas, "live" para vender de verdad.
+const PADDLE_TOKEN = "__PADDLE_TOKEN__";
+const PADDLE_ENV = "__PADDLE_ENV__";
+const PADDLE_PRICE_ID = "pri_01m05wemckby3pd9v6rkkxyaae";
+
+if (window.Paddle && PADDLE_TOKEN.indexOf("__") !== 0) {
+  if (PADDLE_ENV === "sandbox") Paddle.Environment.set("sandbox");
+  Paddle.Initialize({ token: PADDLE_TOKEN });
+}
+
+function buyOmnimount(ev) {
+  ev.preventDefault();
+  if (!window.Paddle || PADDLE_TOKEN.indexOf("__") === 0) {
+    alert(document.documentElement.lang === "es"
+      ? "La tienda estará disponible muy pronto. Mientras tanto puedes compilar la versión gratuita desde GitHub."
+      : "The store is opening very soon. Meanwhile you can build the free version from GitHub.");
+    return;
+  }
+  Paddle.Checkout.open({
+    items: [{ priceId: PADDLE_PRICE_ID, quantity: 1 }],
+    settings: {
+      successUrl: window.location.origin + "/thanks.html",
+      locale: document.documentElement.lang === "es" ? "es" : "en"
+    }
+  });
+}
 </script>
 </body>
 </html>
