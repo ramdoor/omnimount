@@ -54,6 +54,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleVersion</key>           <string>0.1.0</string>
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
     <key>CFBundleExecutable</key>        <string>Omnimount</string>
+    <key>CFBundleIconFile</key>          <string>AppIcon</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>
     <key>LSMinimumSystemVersion</key>    <string>13.0</string>
     <key>LSUIElement</key>               <true/>
@@ -61,6 +62,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
+
+cp "$REPO_DIR/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 # Binarios autocontenidos: el CLI y fuse2fs viajan dentro del bundle
 # (ToolLocator busca junto al ejecutable). Así el .pkg solo instala la app.
@@ -71,13 +74,27 @@ else
     echo "AVISO: vendor/bin/fuse2fs no existe (ejecuta 'make fuse2fs'); el bundle no incluirá fuse2fs."
 fi
 
-# Con una identidad estable el TCC de la app sobrevive a recompilaciones;
-# si no hay ninguna, firma ad-hoc (el helper XPC rechaza clientes sin Team ID).
-SIGN_ID="$(security find-identity -v -p codesigning 2>/dev/null | awk -F '"' 'NR==1 {print $2}')"
-codesign --force --identifier org.omnimount.helper --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/OmnimountHelper"
-codesign --force --identifier org.omnimount.cli --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/omnimount-cli"
-[ -f "$APP/Contents/MacOS/fuse2fs" ] && codesign --force --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/fuse2fs"
-codesign --force --sign "${SIGN_ID:--}" "$APP"
+# Firma. Prioridad: Developer ID Application (distribución, con Hardened
+# Runtime + timestamp, requisito de notarización) → cualquier identidad de
+# desarrollo (el TCC sobrevive a recompilaciones) → ad-hoc.
+DEVID="$(security find-identity -v -p codesigning 2>/dev/null | grep "Developer ID Application" | head -1 | awk -F '"' '{print $2}' || true)"
+if [ -n "$DEVID" ]; then
+    SIGN_ID="$DEVID"
+    RUNTIME_FLAGS="--options runtime --timestamp"
+    echo "==> Firmando para distribución: $SIGN_ID"
+else
+    SIGN_ID="$(security find-identity -v -p codesigning 2>/dev/null | awk -F '"' 'NR==1 {print $2}')"
+    RUNTIME_FLAGS=""
+    echo "==> Firma de desarrollo: ${SIGN_ID:-ad-hoc}"
+fi
+
+ENTITLEMENTS="$REPO_DIR/scripts/tools.entitlements"
+# shellcheck disable=SC2086  # RUNTIME_FLAGS debe expandirse en palabras
+codesign --force $RUNTIME_FLAGS --identifier org.omnimount.helper --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/OmnimountHelper"
+codesign --force $RUNTIME_FLAGS --identifier org.omnimount.cli --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/omnimount-cli"
+# fuse2fs carga libfuse-t (otro equipo): necesita library-validation off.
+[ -f "$APP/Contents/MacOS/fuse2fs" ] && codesign --force $RUNTIME_FLAGS --entitlements "$ENTITLEMENTS" --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/fuse2fs"
+codesign --force $RUNTIME_FLAGS --sign "${SIGN_ID:--}" "$APP"
 echo ""
 echo "==> Creado $APP"
 echo "Ábrela con: open \"$APP\""
