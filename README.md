@@ -1,192 +1,195 @@
 # Omnimount
 
-Acceso de **lectura y escritura** a sistemas de ficheros que macOS no soporta
-de forma nativa — **ext2/ext3/ext4** y **NTFS** — desde una app de barra de
-menú en SwiftUI y un CLI. Omnimount no implementa drivers: **envuelve
-herramientas open source ya existentes** ([fuse2fs] de e2fsprogs y [ntfs-3g])
-sobre una capa FUSE ([FUSE-T] por defecto, sin kext; [macFUSE] como
-alternativa).
+**Read/write access** to filesystems macOS doesn't support natively —
+**ext2/ext3/ext4** and **NTFS** — from a SwiftUI menu bar app and a CLI.
+Omnimount implements no drivers: it **wraps existing open source tools**
+([fuse2fs] from e2fsprogs and [ntfs-3g]) over a FUSE layer ([FUSE-T] by
+default, kext-free; [macFUSE] as an alternative).
 
-Pensado especialmente para tarjetas SD de consolas retro (ArkOS, Batocera,
-ROCKNIX, muOS…), que mezclan particiones FAT con particiones ext4 invisibles
-para macOS.
+Built especially for retro-console SD cards (ArkOS, Batocera, ROCKNIX,
+muOS…), which mix FAT partitions with ext4 partitions invisible to macOS.
 
-- **Requisitos**: macOS 13+, Apple Silicon (Intel debería funcionar, no probado).
-- **Licencia**: GPL-3.0-or-later (fuse2fs y ntfs-3g son GPL).
+🌍 [Versión en español](README.es.md) · 🛒 [Buy the ready-made build](https://omnimount.toucedo.com)
+
+- **Requirements**: macOS 13+, Apple Silicon (Intel should work, untested).
+- **License**: GPL-3.0-or-later (fuse2fs and ntfs-3g are GPL).
 
 [fuse2fs]: https://github.com/tytso/e2fsprogs
 [ntfs-3g]: https://github.com/tuxera/ntfs-3g
 [macFUSE]: https://macfuse.github.io
 [FUSE-T]: https://www.fuse-t.org
 
-## Componentes
+## Components
 
-| Componente | Qué es |
+| Component | What it is |
 |---|---|
-| `omnimount` (CLI) | Lista discos, detecta el FS por magic bytes, monta/desmonta, formatea, clona |
-| `Omnimount.app` | App de barra de menú: detección de discos al vuelo (DiskArbitration), montar/expulsar/formatear, abre en Finder |
-| `OmnimountHelper` | Daemon privilegiado (SMAppService + XPC): operaciones sin pedir contraseña |
-| `OmnimountKit` | Librería Swift compartida |
+| `omnimount` (CLI) | Lists disks, detects filesystems by magic bytes, mounts/unmounts, formats, clones |
+| `Omnimount.app` | Menu bar app: live disk detection (DiskArbitration), mount/eject/format, reveal in Finder |
+| `OmnimountHelper` | Privileged daemon (SMAppService + XPC): password-free operations |
+| `OmnimountKit` | Shared Swift library |
 
-## Instalación
+## Installation
 
-### 1. Capa FUSE
+### 1. FUSE layer
 
-**Opción recomendada — FUSE-T (sin kext, sin Recovery, sin reinicios):**
+**Recommended — FUSE-T (no kext, no Recovery, no reboots):**
 
 ```sh
 brew install --cask macos-fuse-t/cask/fuse-t
 ```
 
-Contras: es de código cerrado (gratuito) y los volúmenes se montan como NFS
-local. Ventaja decisiva: cero fricción de instalación.
+Trade-off: it's closed source (free of charge) and volumes mount as local
+NFS. Decisive advantage: zero install friction.
 
-**Opción 100 % open source — macFUSE (kext):**
+**Fully open source alternative — macFUSE (kext):**
 
 ```sh
 brew install --cask macfuse
 ```
 
-macFUSE usa una extensión del kernel, que macOS bloquea por defecto:
+macFUSE uses a kernel extension, which macOS blocks by default:
 
-1. **Solo Apple Silicon** (imprescindible; sin este paso el botón "Permitir"
-   del paso 2 ni siquiera aparece): apaga el Mac del todo, mantén pulsado el
-   botón de encendido hasta ver "Cargando opciones de arranque" → **Opciones**
-   → menú **Utilidades → Utilidad de Seguridad de Arranque** → selecciona tu
-   disco → **Política de seguridad… → Seguridad reducida** + marca
-   **Permitir la gestión de usuario de extensiones de kernel de
-   desarrolladores identificados**. Reinicia.
-   (Comprueba el estado con `sudo bputil -d`: debe decir
+1. **Apple Silicon only** (mandatory; without this the "Allow" button in
+   step 2 never appears): shut the Mac down completely, hold the power
+   button until "Loading startup options" → **Options** → menu
+   **Utilities → Startup Security Utility** → select your disk →
+   **Security Policy… → Reduced Security** + check
+   **Allow user management of kernel extensions from identified
+   developers**. Reboot.
+   (Check the state with `sudo bputil -d`: it must say
    "3rd Party Kexts Status: Enabled".)
-2. Ya en macOS, ve a **Ajustes del Sistema → Privacidad y seguridad**: baja
-   hasta el aviso sobre software de sistema de "Benjamin Fleischer" — pulsa
-   **Permitir**.
-3. Reinicia cuando lo pida.
+2. Back in macOS, go to **System Settings → Privacy & Security**: scroll to
+   the notice about system software from "Benjamin Fleischer" — click
+   **Allow**.
+3. Reboot when prompted.
 
-⚠️ **FUSE-T y macFUSE no conviven bien**: el instalador de FUSE-T sobrescribe
-las librerías de macFUSE en `/usr/local/lib`. Elige un backend por sistema
-(o reinstala macFUSE si quieres volver a él).
+⚠️ **FUSE-T and macFUSE don't coexist well**: the FUSE-T installer
+overwrites macFUSE's libraries in `/usr/local/lib`. Pick one backend per
+system (or reinstall macFUSE to go back to it).
 
-### 2. Herramientas de sistemas de ficheros
+### 2. Filesystem tools
 
 ```sh
-# e2fsprogs: aporta e2fsck, mkfs.ext4, etc. (¡pero NO fuse2fs, ver abajo!)
+# e2fsprogs: provides e2fsck, mkfs.ext4, etc. (but NOT fuse2fs, see below!)
 brew install e2fsprogs
 
-# ntfs-3g: montaje NTFS lectura/escritura + mkntfs (tap gromgit/fuse)
+# ntfs-3g: read/write NTFS mounting + mkntfs (gromgit/fuse tap)
 brew install gromgit/fuse/ntfs-3g-mac
 ```
 
-**fuse2fs hay que compilarlo**: el bottle de Homebrew de e2fsprogs no lo
-incluye porque necesita cabeceras FUSE al compilar. Con la capa FUSE ya
-instalada:
+**fuse2fs must be compiled**: the Homebrew bottle of e2fsprogs doesn't
+include it because it needs FUSE headers at build time. With the FUSE layer
+installed:
 
 ```sh
-make fuse2fs                    # compila contra FUSE-T (por defecto)
-BACKEND=macfuse make fuse2fs    # o contra macFUSE
+make fuse2fs                    # builds against FUSE-T (default)
+BACKEND=macfuse make fuse2fs    # or against macFUSE
 ```
 
 ### 3. Omnimount
 
 ```sh
-make install    # CLI en /opt/homebrew/bin/omnimount + app en /Applications
+make install    # CLI at /opt/homebrew/bin/omnimount + app in /Applications
 ```
 
-Verifica el estado de todo:
+Check the state of everything:
 
 ```sh
 omnimount doctor
 ```
 
-### 4. Permisos (una sola vez)
+### 4. Permissions (one-time)
 
-Acceder a `/dev/diskXsY` exige **dos** permisos distintos:
+Accessing `/dev/diskXsY` requires **two** distinct permissions:
 
-1. **root** — los nodos pertenecen a `root:operator` con modo 640.
-2. **Acceso total al disco (TCC)** — desde macOS Catalina, abrir dispositivos
-   en bruto devuelve `Operation not permitted` *incluso siendo root* si la app
-   responsable no tiene Acceso total al disco.
+1. **root** — device nodes belong to `root:operator`, mode 640.
+2. **Full Disk Access (TCC)** — since macOS Catalina, opening raw devices
+   returns `Operation not permitted` *even as root* unless the responsible
+   app has Full Disk Access.
 
-Configuración recomendada (app + helper, sin contraseñas):
+Recommended setup (app + helper, no password prompts):
 
-1. Abre Omnimount.app → pulsa **"Activar helper"** → aprueba el elemento de
-   fondo en **Ajustes → General → Elementos de inicio**.
-2. En **Ajustes → Privacidad y seguridad → Acceso total al disco**, añade con
-   **+** el binario `/Applications/Omnimount.app/Contents/MacOS/OmnimountHelper`
-   (Cmd+Mayús+G para escribir la ruta).
+1. Open Omnimount.app → click **"Activate helper"** → approve the
+   background item in **Settings → General → Login Items**.
+2. In **Settings → Privacy & Security → Full Disk Access**, add
+   `/Applications/Omnimount.app/Contents/MacOS/OmnimountHelper` with **+**
+   (Cmd+Shift+G to type the path).
 
-Para usar el CLI con sudo, concede Acceso total al disco también a tu
-terminal y a `/opt/homebrew/bin/omnimount`.
+To use the CLI with sudo, grant Full Disk Access to your terminal and to
+the `omnimount` binary as well.
 
-⚠️ **Nota para desarrolladores**: TCC liga el permiso a la firma del binario.
-Compila con una identidad estable (el Makefile usa tu primera identidad de
-desarrollo) o tendrás que renovar el permiso tras cada build.
+⚠️ **Developer note**: TCC binds the permission to the binary's code
+signature. Build with a stable identity (the Makefile picks your first
+development identity) or you'll have to re-grant after every build.
 
-## Uso del CLI
-
-```sh
-omnimount list                  # discos externos + FS detectado
-sudo omnimount detect disk4s2   # magic bytes (--verbose vuelca el boot sector)
-sudo omnimount mount disk4s2    # monta con el backend adecuado
-omnimount unmount disk4s2       # desmontaje limpio
-sudo omnimount test disk4s2     # monta + prueba de escritura + desmonta + fsck
-
-sudo omnimount clone disk4 backup.img        # clona disco entero (o partición)
-sudo omnimount restore backup.img disk4      # restaura (pide confirmación)
-sudo omnimount unhide disk4s3                # quita el flag "oculta" (FAT 0x1C, ArkOS)
-sudo omnimount format disk4s3 ext4 --label EASYROMS   # formatea (confirmación estricta)
-```
-
-Detección por magic bytes:
-
-- **ext2/3/4** — superbloque en offset 1024, magic `0xEF53`; las feature flags
-  distinguen ext2/ext3/ext4 y se lee la etiqueta del volumen.
-- **NTFS** — OEM ID `NTFS    ` en el offset 3 del boot sector.
-- También reconoce exFAT, FAT, Btrfs y Linux swap (sin montarlos).
-
-## App de barra de menú
-
-- Lista discos externos al vuelo (DiskArbitration); montar/expulsar/abrir en
-  Finder por partición.
-- **Helper activo** → todas las operaciones sin diálogo de contraseña
-  (SMAppService + XPC; el helper verifica la firma del cliente). Sin helper,
-  la app recurre al diálogo de administrador de macOS.
-- **Formatear** desde el menú "⋯" de cada partición: hoja con avisos y
-  confirmación en dos pasos (ext2/3/4, NTFS, FAT32, exFAT; ajusta el tipo MBR).
-- Aviso 🎮 cuando la tarjeta parece de una consola retro (ArkOS/EASYROMS,
-  Batocera, ROCKNIX, muOS, RetroPie, Recalbox…).
-
-## Desarrollo
+## CLI usage
 
 ```sh
-make build      # compila (scratch path en ~/.omnimount-build)
-make test       # tests del detector con imágenes sintéticas
-make app        # dist/Omnimount.app firmada
+omnimount list                  # external disks + detected filesystems
+sudo omnimount detect disk4s2   # magic bytes (--verbose dumps the boot sector)
+sudo omnimount mount disk4s2    # mounts with the right backend
+omnimount unmount disk4s2       # clean unmount
+sudo omnimount test disk4s2     # mount + write test + unmount + fsck
+
+sudo omnimount clone disk4 backup.img        # clone whole disk (or partition)
+sudo omnimount restore backup.img disk4      # restore (asks for confirmation)
+sudo omnimount unhide disk4s3                # clear the "hidden" flag (FAT 0x1C, ArkOS)
+sudo omnimount format disk4s3 ext4 --label EASYROMS   # format (strict confirmation)
 ```
 
-Estructura:
+Magic-byte detection:
+
+- **ext2/3/4** — superblock at offset 1024, magic `0xEF53`; feature flags
+  distinguish ext2/ext3/ext4 and the volume label is read too.
+- **NTFS** — OEM ID `NTFS    ` at offset 3 of the boot sector.
+- Also recognizes exFAT, FAT, Btrfs and Linux swap (without mounting them).
+
+## Menu bar app
+
+- Lists external disks live (DiskArbitration); mount/eject/reveal in Finder
+  per partition.
+- **Helper active** → every operation without a password dialog
+  (SMAppService + XPC; the helper verifies the client's code signature).
+  Without the helper, the app falls back to the macOS admin dialog.
+- **Format** from each partition's "⋯" menu: a sheet with warnings and
+  two-step confirmation (ext2/3/4, NTFS, FAT32, exFAT; also updates the MBR
+  type byte).
+- 🎮 notice when the inserted card looks like a retro console's
+  (ArkOS/EASYROMS, Batocera, ROCKNIX, muOS, RetroPie, Recalbox…).
+
+## Development
+
+```sh
+make build      # builds (scratch path at ~/.omnimount-build)
+make test       # detector tests with synthetic images
+make app        # signed dist/Omnimount.app
+```
+
+Layout:
 
 ```
 Sources/OmnimountKit/     DiskLister, FilesystemDetector, Mounter, Cloner,
                           Formatter, RetroCards, ToolLocator, HelperProtocol
 Sources/OmnimountCLI/     list, detect, mount, unmount, test, clone, restore,
                           unhide, format, doctor
-Sources/OmnimountApp/     MenuBarExtra + DiskArbitration + cliente XPC
-Sources/OmnimountHelper/  daemon privilegiado (SMAppService)
-scripts/build-fuse2fs.sh  compila fuse2fs (BACKEND=fuse-t|macfuse)
+Sources/OmnimountApp/     MenuBarExtra + DiskArbitration + XPC client
+Sources/OmnimountHelper/  privileged daemon (SMAppService)
+scripts/build-fuse2fs.sh  builds fuse2fs (BACKEND=fuse-t|macfuse)
 ```
 
-No compiles dentro de carpetas sincronizadas (OneDrive/Dropbox/iCloud): los
-scripts usan `--scratch-path` fuera del repo por ese motivo.
+Don't build inside synced folders (OneDrive/Dropbox/iCloud): the scripts
+use `--scratch-path` outside the repo for that reason.
 
-## Limitaciones conocidas
+## Known limitations
 
-- Los volúmenes montados por el helper/root no aparecen en la barra lateral
-  del Finder (DiskArbitration no los publica en la sesión del usuario). El
-  volumen funciona con normalidad en `/Volumes/<nombre>`; arrástralo una vez
-  a Favoritos si lo quieres a mano.
-- NTFS con backend FUSE-T está pendiente de validación (ntfs-3g de Homebrew
-  enlaza contra las librerías de macFUSE).
-- Los binarios FUSE no se empaquetan con la app: deben estar instalados.
-- fsck de verificación es no-destructivo (`e2fsck -fn`, `ntfsfix -n`): informa,
-  no repara.
+- Volumes mounted by the helper/root don't show in the Finder sidebar
+  (DiskArbitration doesn't publish them into the user session). The volume
+  works normally at `/Volumes/<name>`; drag it to Favorites once if you
+  want it handy.
+- NTFS over the FUSE-T backend is pending validation (Homebrew's ntfs-3g
+  links against macFUSE's libraries).
+- FUSE binaries aren't bundled with the open source build: they must be
+  installed. (The [paid build](https://omnimount.toucedo.com) bundles
+  everything.)
+- Verification fsck is non-destructive (`e2fsck -fn`, `ntfsfix -n`): it
+  reports, it doesn't repair.
