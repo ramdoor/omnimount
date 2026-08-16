@@ -55,6 +55,17 @@ final class HelperClient: ObservableObject {
         refreshState()
     }
 
+    /// Repara un helper que launchd rechaza arrancar (EX_CONFIG por "LWCR"):
+    /// al actualizar la app, la huella de firma que guardó el registro deja de
+    /// coincidir con el binario nuevo. Des-registrar y volver a registrar la
+    /// refresca.
+    func repair() {
+        try? service.unregister()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.install()
+        }
+    }
+
     // MARK: - XPC
 
     private func makeConnection() -> NSXPCConnection {
