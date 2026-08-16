@@ -78,10 +78,17 @@ struct SetupView: View {
             stepRow(
                 done: helperReachable && helperHasFDA,
                 title: helperFDATitle,
-                detail: L10n.t("Añade con + el binario /Applications/Omnimount.app/Contents/MacOS/OmnimountHelper (Cmd+Mayús+G para pegar la ruta).", "Add the binary /Applications/Omnimount.app/Contents/MacOS/OmnimountHelper with + (Cmd+Shift+G to paste the path)."),
-                actionLabel: L10n.t("Abrir Acceso total al disco", "Open Full Disk Access"),
+                detail: helperNotResponding
+                    ? L10n.t("El helper está registrado pero no arranca (suele pasar tras actualizar la app). \"Reparar helper\" lo re-registra; después vuelve a comprobar.", "The helper is registered but won't start (usually after updating the app). \"Repair helper\" re-registers it; then check again.")
+                    : L10n.t("Añade con + el binario /Applications/Omnimount.app/Contents/MacOS/OmnimountHelper (Cmd+Mayús+G para pegar la ruta).", "Add the binary /Applications/Omnimount.app/Contents/MacOS/OmnimountHelper with + (Cmd+Shift+G to paste the path)."),
+                actionLabel: helperNotResponding
+                    ? L10n.t("Reparar helper", "Repair helper")
+                    : L10n.t("Abrir Acceso total al disco", "Open Full Disk Access"),
                 action: {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
+                    if helperNotResponding {
+                        mountController.helper.repair()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { refresh() }
+                    } else if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
                         NSWorkspace.shared.open(url)
                     }
                 }
@@ -108,6 +115,11 @@ struct SetupView: View {
         .padding(20)
         .frame(width: 560, height: 480, alignment: .topLeading)
         .onAppear { refresh() }
+    }
+
+    /// Registrado como activo pero sin responder al XPC: candidato a reparación.
+    private var helperNotResponding: Bool {
+        mountController.helper.state == .enabled && !helperReachable
     }
 
     private var allDone: Bool {

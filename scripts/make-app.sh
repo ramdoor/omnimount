@@ -77,7 +77,9 @@ fi
 # Firma. Prioridad: Developer ID Application (distribución, con Hardened
 # Runtime + timestamp, requisito de notarización) → cualquier identidad de
 # desarrollo (el TCC sobrevive a recompilaciones) → ad-hoc.
-DEVID="$(security find-identity -v -p codesigning 2>/dev/null | grep "Developer ID Application" | head -1 | awk -F '"' '{print $2}' || true)"
+# Firmar por hash SHA-1: los nombres pueden ser ambiguos si el llavero tiene
+# copias duplicadas del certificado (p. ej. la de Xcode y la del CSR manual).
+DEVID="$(security find-identity -v -p codesigning 2>/dev/null | grep "Developer ID Application" | head -1 | awk '{print $2}' || true)"
 if [ -n "$DEVID" ]; then
     SIGN_ID="$DEVID"
     RUNTIME_FLAGS="--options runtime --timestamp"
