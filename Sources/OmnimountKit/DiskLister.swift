@@ -21,11 +21,11 @@ public struct DiskPartition: Identifiable, Sendable {
     public var contentHint: String {
         switch content {
         case "Linux Filesystem", "0FC63DAF-8483-4772-8E79-3D69D8477DE4", "Linux":
-            return "Linux (posible ext4)"
+            return L10n.t("Linux (posible ext4)", "Linux (likely ext4)")
         case "Microsoft Basic Data", "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7", "Windows_NTFS":
             return "Windows (NTFS/exFAT/FAT)"
         case "0x1C", "0x16", "0x1B", "0x1E", "0x11", "0x14", "0x17":
-            return "FAT oculta (\(content); móntala tras `omnimount unhide`)"
+            return L10n.t("FAT oculta (\(content); móntala tras `omnimount unhide`)", "Hidden FAT (\(content); mount it after `omnimount unhide`)")
         default:
             return content
         }
@@ -66,8 +66,8 @@ public enum DiskListerError: Error, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .diskutilFailed(let stderr): return "diskutil falló: \(stderr)"
-        case .badPlist: return "No se pudo interpretar la salida de diskutil."
+        case .diskutilFailed(let stderr): return L10n.t("diskutil falló: \(stderr)", "diskutil failed: \(stderr)")
+        case .badPlist: return L10n.t("No se pudo interpretar la salida de diskutil.", "Could not parse diskutil output.")
         }
     }
 }

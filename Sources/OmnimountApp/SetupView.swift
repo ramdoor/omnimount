@@ -20,11 +20,11 @@ struct SetupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Configuración de Omnimount")
+            Text(L10n.t("Configuración de Omnimount", "Omnimount Setup"))
                 .font(.title2.bold())
                 .padding(.bottom, 8)
 
-            Text("Cada fila se comprueba en vivo. Completa las que estén en rojo, en orden.")
+            Text(L10n.t("Cada fila se comprueba en vivo. Completa las que estén en rojo, en orden.", "Every row is checked live. Complete the red ones, in order."))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 10)
@@ -32,40 +32,40 @@ struct SetupView: View {
             stepRow(
                 done: fuseLayer != .none,
                 title: fuseLayerTitle,
-                detail: "La capa que permite montar sistemas de ficheros en espacio de usuario. FUSE-T no necesita kext ni reinicios.",
-                actionLabel: "Copiar comando de instalación",
+                detail: L10n.t("La capa que permite montar sistemas de ficheros en espacio de usuario. FUSE-T no necesita kext ni reinicios.", "The layer that mounts filesystems in user space. FUSE-T needs no kext and no reboots."),
+                actionLabel: L10n.t("Copiar comando de instalación", "Copy install command"),
                 action: { copy("brew install --cask macos-fuse-t/cask/fuse-t") }
             )
 
             stepRow(
                 done: fuse2fsPath != nil,
-                title: fuse2fsPath.map { "fuse2fs — \($0)" } ?? "fuse2fs (montaje ext2/3/4)",
-                detail: "Se compila con `make fuse2fs` desde el repositorio (el paquete de Homebrew no lo incluye).",
-                actionLabel: "Copiar comando",
+                title: fuse2fsPath.map { "fuse2fs — \($0)" } ?? L10n.t("fuse2fs (montaje ext2/3/4)", "fuse2fs (ext2/3/4 mounting)"),
+                detail: L10n.t("Se compila con `make fuse2fs` desde el repositorio (el paquete de Homebrew no lo incluye).", "Built with `make fuse2fs` from the repository (the Homebrew package does not include it)."),
+                actionLabel: L10n.t("Copiar comando", "Copy command"),
                 action: { copy("make fuse2fs") }
             )
 
             stepRow(
                 done: ntfs3gPath != nil,
-                title: ntfs3gPath.map { "ntfs-3g — \($0)" } ?? "ntfs-3g (montaje NTFS)",
-                detail: "Montaje NTFS en escritura y mkntfs para formatear.",
-                actionLabel: "Copiar comando",
+                title: ntfs3gPath.map { "ntfs-3g — \($0)" } ?? L10n.t("ntfs-3g (montaje NTFS)", "ntfs-3g (NTFS mounting)"),
+                detail: L10n.t("Montaje NTFS en escritura y mkntfs para formatear.", "Read/write NTFS mounting plus mkntfs for formatting."),
+                actionLabel: L10n.t("Copiar comando", "Copy command"),
                 action: { copy("brew install gromgit/fuse/ntfs-3g-mac") }
             )
 
             stepRow(
                 done: e2fsckPath != nil,
-                title: "e2fsprogs (verificación y formateo ext4)",
-                detail: "e2fsck, mkfs.ext4 y compañía.",
-                actionLabel: "Copiar comando",
+                title: L10n.t("e2fsprogs (verificación y formateo ext4)", "e2fsprogs (ext4 checking and formatting)"),
+                detail: L10n.t("e2fsck, mkfs.ext4 y compañía.", "e2fsck, mkfs.ext4 and friends."),
+                actionLabel: L10n.t("Copiar comando", "Copy command"),
                 action: { copy("brew install e2fsprogs") }
             )
 
             stepRow(
                 done: mountController.helper.state == .enabled,
-                title: "Helper privilegiado (operaciones sin contraseña)",
-                detail: "Daemon aprobado una única vez en Ajustes → Elementos de inicio.",
-                actionLabel: mountController.helper.state == .requiresApproval ? "Abrir Elementos de inicio" : "Activar helper",
+                title: L10n.t("Helper privilegiado (operaciones sin contraseña)", "Privileged helper (password-free operations)"),
+                detail: L10n.t("Daemon aprobado una única vez en Ajustes → Elementos de inicio.", "A daemon you approve once in Settings → Login Items."),
+                actionLabel: mountController.helper.state == .requiresApproval ? L10n.t("Abrir Elementos de inicio", "Open Login Items") : L10n.t("Activar helper", "Enable helper"),
                 action: {
                     if mountController.helper.state == .requiresApproval {
                         SMAppService.openSystemSettingsLoginItems()
@@ -78,8 +78,8 @@ struct SetupView: View {
             stepRow(
                 done: helperReachable && helperHasFDA,
                 title: helperFDATitle,
-                detail: "Añade con + el binario /Applications/Omnimount.app/Contents/MacOS/OmnimountHelper (Cmd+Mayús+G para pegar la ruta).",
-                actionLabel: "Abrir Acceso total al disco",
+                detail: L10n.t("Añade con + el binario /Applications/Omnimount.app/Contents/MacOS/OmnimountHelper (Cmd+Mayús+G para pegar la ruta).", "Add the binary /Applications/Omnimount.app/Contents/MacOS/OmnimountHelper with + (Cmd+Shift+G to paste the path)."),
+                actionLabel: L10n.t("Abrir Acceso total al disco", "Open Full Disk Access"),
                 action: {
                     if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
                         NSWorkspace.shared.open(url)
@@ -88,7 +88,7 @@ struct SetupView: View {
             )
 
             if let copied = copiedCommand {
-                Label("Copiado: \(copied) — pégalo en Terminal", systemImage: "doc.on.clipboard")
+                Label(L10n.t("Copiado: \(copied) — pégalo en Terminal", "Copied: \(copied) — paste it in Terminal"), systemImage: "doc.on.clipboard")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.top, 6)
@@ -98,11 +98,11 @@ struct SetupView: View {
 
             HStack {
                 if allDone {
-                    Label("Todo listo. Omnimount está completamente operativo.", systemImage: "checkmark.seal.fill")
+                    Label(L10n.t("Todo listo. Omnimount está completamente operativo.", "All set. Omnimount is fully operational."), systemImage: "checkmark.seal.fill")
                         .foregroundStyle(.green)
                 }
                 Spacer()
-                Button("Volver a comprobar") { refresh() }
+                Button(L10n.t("Volver a comprobar", "Check again")) { refresh() }
             }
         }
         .padding(20)
@@ -118,17 +118,17 @@ struct SetupView: View {
 
     private var fuseLayerTitle: String {
         switch fuseLayer {
-        case .fuseT: return "Capa FUSE — FUSE-T (sin kext) ✓"
-        case .macFUSE: return "Capa FUSE — macFUSE (kext)"
-        case .none: return "Capa FUSE (FUSE-T recomendado)"
+        case .fuseT: return L10n.t("Capa FUSE — FUSE-T (sin kext) ✓", "FUSE layer — FUSE-T (kext-free) ✓")
+        case .macFUSE: return L10n.t("Capa FUSE — macFUSE (kext)", "FUSE layer — macFUSE (kext)")
+        case .none: return L10n.t("Capa FUSE (FUSE-T recomendado)", "FUSE layer (FUSE-T recommended)")
         }
     }
 
     private var helperFDATitle: String {
-        if !helperReachable { return "Acceso total al disco del helper (helper no disponible aún)" }
+        if !helperReachable { return L10n.t("Acceso total al disco del helper (helper no disponible aún)", "Helper Full Disk Access (helper not available yet)") }
         return helperHasFDA
-            ? "Acceso total al disco del helper ✓"
-            : "Acceso total al disco del helper — FALTA"
+            ? L10n.t("Acceso total al disco del helper ✓", "Helper Full Disk Access ✓")
+            : L10n.t("Acceso total al disco del helper — FALTA", "Helper Full Disk Access — MISSING")
     }
 
     @ViewBuilder

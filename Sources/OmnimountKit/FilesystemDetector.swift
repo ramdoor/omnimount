@@ -36,7 +36,7 @@ public enum DetectedFilesystem: String, Sendable {
         case .fat: return "FAT"
         case .btrfs: return "Btrfs"
         case .linuxSwap: return "Linux swap"
-        case .unknown: return "desconocido"
+        case .unknown: return L10n.t("desconocido", "unknown")
         }
     }
 }
@@ -58,7 +58,7 @@ public enum DetectionError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .cannotOpenDevice(let path):
-            return "No se puede leer \(path). Leer el nodo de dispositivo requiere privilegios: ejecuta con sudo."
+            return L10n.t("No se puede leer \(path). Leer el nodo de dispositivo requiere privilegios: ejecuta con sudo.", "Cannot read \(path). Reading the device node requires privileges: run with sudo.")
         }
     }
 }

@@ -48,7 +48,7 @@ final class MountController: ObservableObject {
     func format(_ partition: DiskPartition, as filesystem: String, label: String,
                 completion: @escaping () -> Void) {
         guard helper.state == .enabled else {
-            lastMessage = "Formatear desde la app requiere el helper activo. Alternativa: sudo omnimount format."
+            lastMessage = L10n.t("Formatear desde la app requiere el helper activo. Alternativa: sudo omnimount format.", "Formatting from the app requires the helper. Alternative: sudo omnimount format.")
             completion()
             return
         }
@@ -98,7 +98,7 @@ final class MountController: ObservableObject {
     private func runPrivileged(partition: DiskPartition, verb: String,
                                completion: @escaping () -> Void) {
         guard let cli = cliPath else {
-            lastMessage = "No se encontró el CLI `omnimount`. Instálalo con `make install` (ver README)."
+            lastMessage = L10n.t("No se encontró el CLI `omnimount`. Instálalo con `make install` (ver README).", "The `omnimount` CLI was not found. Install it with `make install` (see README).")
             return
         }
         busyPartitions.insert(partition.deviceIdentifier)

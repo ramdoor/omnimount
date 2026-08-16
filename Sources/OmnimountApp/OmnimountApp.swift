@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import OmnimountKit
 
 @main
 struct OmnimountApp: App {
@@ -13,7 +14,7 @@ struct OmnimountApp: App {
         // dejaría un proceso colgado esperando eternamente.
         let args = CommandLine.arguments.dropFirst()
         if !args.isEmpty && !args.allSatisfy({ $0.hasPrefix("-") }) {
-            FileHandle.standardError.write(Data("Esto es la app de menú Omnimount, no el CLI. Usa /opt/homebrew/bin/omnimount.\n".utf8))
+            FileHandle.standardError.write(Data((L10n.t("Esto es la app de menú Omnimount, no el CLI. Usa el binario omnimount-cli.", "This is the Omnimount menu bar app, not the CLI. Use the omnimount-cli binary.") + "\n").utf8))
             exit(64)
         }
     }
