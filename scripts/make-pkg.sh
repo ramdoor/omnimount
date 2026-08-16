@@ -40,9 +40,16 @@ chmod +x "$STAGING/scripts/postinstall"
 # Identidad "Developer ID Installer" si existe; si no, pkg sin firmar (dev).
 INSTALLER_ID="$(security find-identity -v 2>/dev/null | grep "Developer ID Installer" | head -1 | awk -F '"' '{print $2}' || true)"
 
+# Impedir la "relocación": sin esto, si el instalador encuentra otra copia de
+# Omnimount.app en el disco (p. ej. la de dist/ en la máquina de desarrollo),
+# instala encima de esa en lugar de /Applications.
+pkgbuild --analyze --root "$STAGING/root" "$STAGING/component.plist" >/dev/null
+plutil -replace "0.BundleIsRelocatable" -bool NO "$STAGING/component.plist"
+
 ARGS=(
     --root "$STAGING/root"
     --scripts "$STAGING/scripts"
+    --component-plist "$STAGING/component.plist"
     --identifier org.omnimount.pkg
     --version "$VERSION"
     --install-location /

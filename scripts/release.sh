@@ -14,7 +14,7 @@ SKIP_NOTARIZE="${1:-}"
 echo "=== 1/4 App firmada ==="
 ./scripts/make-app.sh
 
-if ! codesign -dv dist/Omnimount.app 2>&1 | grep -q "Authority=Developer ID"; then
+if ! codesign -dvv dist/Omnimount.app 2>&1 | grep -q "Authority=Developer ID"; then
     echo ""
     echo "AVISO: la app NO está firmada con Developer ID (¿faltan los certificados?)."
     echo "El pkg resultante solo vale para pruebas locales."
