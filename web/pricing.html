@@ -107,14 +107,19 @@ See the <a href="terms.html">terms</a> and the
 <script>
 const PADDLE_TOKEN = "live_e3e7dceb58b5f5d508c5c7ba301";
 const PADDLE_PRICE_ID = "pri_01m05wemckby3pd9v6rkkxyaae";
-if (window.Paddle) { Paddle.Initialize({ token: PADDLE_TOKEN }); }
+if (window.Paddle) { Paddle.Initialize({ token: PADDLE_TOKEN, eventCallback: function(ev) {
+    if (ev.name === "checkout.completed") {
+      var txn = (ev.data && (ev.data.transaction_id || (ev.data.transaction && ev.data.transaction.id))) || "";
+      setTimeout(function(){ window.location.href = "/thanks.html" + (txn ? "?txn=" + txn : ""); }, 1200);
+    }
+  } }); }
 function buyOmnimount(ev) {
   ev.preventDefault();
   if (window.plausible) plausible("Comprar");
   if (!window.Paddle) { window.location.href = "/"; return; }
   Paddle.Checkout.open({
     items: [{ priceId: PADDLE_PRICE_ID, quantity: 1 }],
-    settings: { successUrl: window.location.origin + "/thanks.html" }
+    settings: {}
   });
 }
 </script>
