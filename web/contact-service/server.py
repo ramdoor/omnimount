@@ -38,7 +38,7 @@ MAIL_FROM = os.environ.get("MAIL_FROM", SMTP_USER)
 PADDLE_API_KEY = os.environ.get("PADDLE_API_KEY", "")
 
 STORE = Path("/var/lib/omnimount-contact/messages.jsonl")
-PKG_INTERNAL = "/protected/Omnimount-0.1.0.pkg"  # location interna de nginx
+PKG_INTERNAL = "/protected/Omnimount.pkg"  # location interna de nginx
 MAX_LEN = {"name": 200, "email": 320, "message": 5000}
 TXN_RE = re.compile(r"^txn_[a-z0-9]{20,40}$")
 RATE: dict = {}
@@ -133,7 +133,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("X-Accel-Redirect", PKG_INTERNAL)
         self.send_header("Content-Type", "application/octet-stream")
-        self.send_header("Content-Disposition", 'attachment; filename="Omnimount-0.1.0.pkg"')
+        self.send_header("Content-Disposition", 'attachment; filename="Omnimount.pkg"')
         self.end_headers()
 
     def do_POST(self):

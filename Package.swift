@@ -11,6 +11,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
     ],
     targets: [
         .target(name: "OmnimountKit"),
@@ -23,7 +24,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "OmnimountApp",
-            dependencies: ["OmnimountKit"]
+            dependencies: [
+                "OmnimountKit",
+                .product(name: "Sparkle", package: "Sparkle"),
+            ]
         ),
         .executableTarget(
             name: "OmnimountHelper",

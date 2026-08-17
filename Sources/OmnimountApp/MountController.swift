@@ -18,6 +18,20 @@ final class MountController: ObservableObject {
     /// Monitor al que notificar los montajes propios (lo inyecta la vista).
     weak var monitor: DiskMonitor?
 
+    init() {
+        // Tras una actualización de la app, la huella de firma registrada del
+        // helper (LWCR) queda obsoleta y launchd se niega a arrancarlo.
+        // Detectar el cambio de versión y re-registrarlo automáticamente.
+        let current = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
+        let previous = UserDefaults.standard.string(forKey: "lastRunVersion")
+        UserDefaults.standard.set(current, forKey: "lastRunVersion")
+        if let previous, previous != current, helper.state == .enabled {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                self?.helper.repair()
+            }
+        }
+    }
+
     private let prompt = "Omnimount necesita permisos de administrador para acceder al disco."
 
     private var cliPath: String? { ToolLocator.find(.omnimountCLI) }

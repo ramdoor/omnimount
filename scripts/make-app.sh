@@ -51,14 +51,17 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key>              <string>Omnimount</string>
     <key>CFBundleDisplayName</key>       <string>Omnimount</string>
     <key>CFBundleIdentifier</key>        <string>org.omnimount.app</string>
-    <key>CFBundleVersion</key>           <string>0.1.0</string>
-    <key>CFBundleShortVersionString</key><string>0.1.0</string>
+    <key>CFBundleVersion</key>           <string>0.1.1</string>
+    <key>CFBundleShortVersionString</key><string>0.1.1</string>
     <key>CFBundleExecutable</key>        <string>Omnimount</string>
     <key>CFBundleIconFile</key>          <string>AppIcon</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>
     <key>LSMinimumSystemVersion</key>    <string>13.0</string>
     <key>LSUIElement</key>               <true/>
     <key>NSHumanReadableCopyright</key>  <string>GPL-3.0-or-later</string>
+    <key>SUFeedURL</key>                 <string>https://omnimount.es/updates/appcast.xml</string>
+    <key>SUPublicEDKey</key>             <string>UusfwC7mWB9GwKXd96RdAqtEiwCXmQI87JbrtEWmvs0=</string>
+    <key>SUEnableAutomaticChecks</key>   <true/>
 </dict>
 </plist>
 PLIST
@@ -73,6 +76,13 @@ if [ -f "$REPO_DIR/vendor/bin/fuse2fs" ]; then
 else
     echo "AVISO: vendor/bin/fuse2fs no existe (ejecuta 'make fuse2fs'); el bundle no incluirá fuse2fs."
 fi
+
+# Sparkle: framework embebido + rpath para encontrarlo en el bundle.
+FRAMEWORKS="$APP/Contents/Frameworks"
+mkdir -p "$FRAMEWORKS"
+SPARKLE_FW="$SCRATCH/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+cp -R "$SPARKLE_FW" "$FRAMEWORKS/"
+install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/Omnimount" 2>/dev/null || true
 
 # Firma. Prioridad: Developer ID Application (distribución, con Hardened
 # Runtime + timestamp, requisito de notarización) → cualquier identidad de
@@ -92,6 +102,14 @@ fi
 
 ENTITLEMENTS="$REPO_DIR/scripts/tools.entitlements"
 # shellcheck disable=SC2086  # RUNTIME_FLAGS debe expandirse en palabras
+# Componentes anidados de Sparkle (requisito de notarización).
+SPK="$FRAMEWORKS/Sparkle.framework"
+codesign --force $RUNTIME_FLAGS --sign "${SIGN_ID:--}" "$SPK/Versions/B/XPCServices/Installer.xpc"
+codesign --force $RUNTIME_FLAGS --preserve-metadata=entitlements --sign "${SIGN_ID:--}" "$SPK/Versions/B/XPCServices/Downloader.xpc"
+codesign --force $RUNTIME_FLAGS --sign "${SIGN_ID:--}" "$SPK/Versions/B/Autoupdate"
+codesign --force $RUNTIME_FLAGS --sign "${SIGN_ID:--}" "$SPK/Versions/B/Updater.app"
+codesign --force $RUNTIME_FLAGS --sign "${SIGN_ID:--}" "$SPK"
+
 codesign --force $RUNTIME_FLAGS --identifier org.omnimount.helper --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/OmnimountHelper"
 codesign --force $RUNTIME_FLAGS --identifier org.omnimount.cli --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/omnimount-cli"
 # fuse2fs carga libfuse-t (otro equipo): necesita library-validation off.
