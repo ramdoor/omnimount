@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Precios — Omnimount</title>
+<meta name="description" content="Omnimount: 9,99 € pago único. También disponible gratis como código abierto (GPL-3.0).">
+<link rel="stylesheet" href="legal-style.css">
+<style>
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:28px 0}
+  @media (max-width:700px){.cards{grid-template-columns:1fr}}
+  .price{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:26px}
+  .price.hot{border-color:var(--mount);box-shadow:0 0 0 1px var(--mount)}
+  .amt{font-size:2.2rem;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+  .amt small{font-size:.9rem;font-weight:500;color:var(--muted)}
+  .price h2{margin:0 0 6px;font-size:1.1rem}
+  .price ul{list-style:none;padding:0;margin:16px 0 22px;display:flex;flex-direction:column;gap:8px}
+  .price li{padding-left:22px;position:relative;font-size:.92rem;color:var(--muted)}
+  .price li::before{content:"✓";position:absolute;left:0;color:var(--mount);font-weight:700}
+  .buy{display:inline-block;background:var(--mount);color:#0a1410;font-weight:700;border-radius:10px;
+       padding:12px 24px;text-decoration:none;cursor:pointer;border:none;font-size:1rem}
+  .buy:hover{background:#40d67d}
+  .ghost{display:inline-block;border:1px solid var(--line);color:var(--ink);border-radius:10px;
+       padding:12px 24px;text-decoration:none;font-weight:600}
+  .tax{font-size:.8rem;color:var(--muted);margin-top:10px}
+</style>
+</head>
+<body>
+<header><div class="wrap"><a href="/">Omnimount</a><span>· Precios / Pricing</span></div></header>
+<div class="wrap">
+
+<h1>Precios</h1>
+<p>Omnimount monta, escribe, formatea y clona particiones ext4 y NTFS en macOS.
+Un solo precio, sin suscripciones, sin DRM ni telemetría.</p>
+
+<div class="cards">
+  <div class="price hot">
+    <h2>Omnimount</h2>
+    <div class="amt">9,99&nbsp;€ <small>pago único</small></div>
+    <ul>
+      <li>Instalador firmado y notarizado por Apple</li>
+      <li>Binarios listos para usar: nada que compilar</li>
+      <li>Actualizaciones gratuitas de la versión 1.x</li>
+      <li>Soporte por email</li>
+      <li>Devolución de 14 días sin preguntas</li>
+    </ul>
+    <button class="buy" onclick="buyOmnimount(event)">Comprar Omnimount — 9,99&nbsp;€</button>
+    <p class="tax">El precio no incluye impuestos: el IVA correspondiente a tu país se calcula y muestra al pagar. El pago lo procesa Paddle, que emite la factura.</p>
+  </div>
+  <div class="price">
+    <h2>Open source</h2>
+    <div class="amt">0&nbsp;€ <small>GPL-3.0</small></div>
+    <ul>
+      <li>El mismo código, publicado en GitHub</li>
+      <li>Compílalo tú mismo con `make install`</li>
+      <li>Sin binarios firmados ni soporte</li>
+    </ul>
+    <a class="ghost" href="https://github.com/ramdoor/omnimount">Ver el repositorio</a>
+  </div>
+</div>
+
+<p>Requisitos: macOS 13 o posterior, Apple Silicon.
+Consulta los <a href="terms.html">términos</a> y la
+<a href="refunds.html">política de reembolsos</a>.</p>
+
+<hr>
+
+<span class="lang-note">English</span>
+<h1>Pricing</h1>
+<p>Omnimount mounts, writes, formats and clones ext4 and NTFS partitions on
+macOS. One price, no subscriptions, no DRM, no telemetry.</p>
+
+<div class="cards">
+  <div class="price hot">
+    <h2>Omnimount</h2>
+    <div class="amt">€9.99 <small>one-time</small></div>
+    <ul>
+      <li>Installer signed and notarized by Apple</li>
+      <li>Ready-made binaries — nothing to compile</li>
+      <li>Free 1.x updates</li>
+      <li>Email support</li>
+      <li>14-day no-questions refund</li>
+    </ul>
+    <button class="buy" onclick="buyOmnimount(event)">Buy Omnimount — €9.99</button>
+    <p class="tax">Price excludes tax: VAT/sales tax for your country is calculated and shown at checkout. Payments are processed and invoiced by Paddle.</p>
+  </div>
+  <div class="price">
+    <h2>Open source</h2>
+    <div class="amt">€0 <small>GPL-3.0</small></div>
+    <ul>
+      <li>The exact same code, on GitHub</li>
+      <li>Build it yourself with `make install`</li>
+      <li>No signed binaries or support</li>
+    </ul>
+    <a class="ghost" href="https://github.com/ramdoor/omnimount">View the repository</a>
+  </div>
+</div>
+
+<p>Requirements: macOS 13 or later, Apple Silicon.
+See the <a href="terms.html">terms</a> and the
+<a href="refunds.html">refund policy</a>.</p>
+
+</div>
+
+<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+<script>
+const PADDLE_TOKEN = "live_e3e7dceb58b5f5d508c5c7ba301";
+const PADDLE_PRICE_ID = "pri_01m05wemckby3pd9v6rkkxyaae";
+if (window.Paddle) { Paddle.Initialize({ token: PADDLE_TOKEN }); }
+function buyOmnimount(ev) {
+  ev.preventDefault();
+  if (!window.Paddle) { window.location.href = "/"; return; }
+  Paddle.Checkout.open({
+    items: [{ priceId: PADDLE_PRICE_ID, quantity: 1 }],
+    settings: { successUrl: window.location.origin + "/thanks.html" }
+  });
+}
+</script>
+</body>
+</html>
