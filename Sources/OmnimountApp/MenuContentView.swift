@@ -56,7 +56,8 @@ struct MenuContentView: View {
             dependencyStatus
 
             HStack {
-                Button(L10n.t("Actualizar", "Refresh")) { monitor.refresh() }
+                Button { monitor.refresh() } label: { Image(systemName: "arrow.clockwise") }
+                    .help(L10n.t("Refrescar la lista de discos", "Refresh disk list"))
                 Button(L10n.t("Actualizaciones…", "Updates…")) {
                     Updater.controller.checkForUpdates(nil)
                     NSApp.activate(ignoringOtherApps: true)
