@@ -133,6 +133,8 @@
     .step{margin-top:10px}
   }
 </style>
+<script defer data-domain="omnimount.es" src="https://plausible.alfeonrobotics.com/js/script.js"></script>
+<script>window.plausible = window.plausible || function() { (window.plausible.q = window.plausible.q || []).push(arguments) }</script>
 </head>
 <body>
 
@@ -347,6 +349,7 @@ if (window.Paddle && PADDLE_TOKEN.indexOf("__") !== 0) {
 
 function buyOmnimount(ev) {
   ev.preventDefault();
+  if (window.plausible) plausible("Comprar");
   if (!window.Paddle || PADDLE_TOKEN.indexOf("__") === 0) {
     alert(document.documentElement.lang === "es"
       ? "La tienda estará disponible muy pronto. Mientras tanto puedes compilar la versión gratuita desde GitHub."
