@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Omnimount</title>
 <meta name="description" content="ext4 y NTFS en tu Mac, en lectura y escritura. Sin kexts, sin contraseñas, sin dramas.">
+<meta property="og:title" content="Omnimount">
+<meta property="og:description" content="ext4 y NTFS en tu Mac, en lectura y escritura. Sin kexts, sin contraseñas.">
+<meta property="og:image" content="https://omnimount.es/assets/og.jpg">
+<meta property="og:url" content="https://omnimount.es">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/png" href="data:image/png;base64,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">
 <style>
   :root{
@@ -76,6 +82,27 @@
     border-radius:9px;padding:8px 10px;font-size:.74rem;color:#c9c1ff;margin-top:4px}
   .helperline{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:.72rem;color:var(--muted)}
   .helperline i{width:7px;height:7px;border-radius:50%;background:var(--mount);display:inline-block}
+
+  /* showcase */
+  .shots{display:grid;grid-template-columns:1fr 1.2fr;gap:26px;align-items:start}
+  .shot img{width:100%;height:auto;border-radius:12px}
+  .shot figcaption{font-size:.85rem;color:var(--muted);margin-top:10px;text-align:center}
+  @media (max-width:860px){.shots{grid-template-columns:1fr}}
+
+  /* retro banner */
+  .retro-banner{position:relative;border-radius:16px;overflow:hidden;border:1px solid var(--line);min-height:340px;display:flex;align-items:center}
+  .retro-banner img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .retro-banner .inner{position:relative;padding:40px;max-width:30rem;
+    background:linear-gradient(90deg, rgba(16,16,24,.92) 40%, rgba(16,16,24,0));}
+  .retro-banner h3{font-size:1.4rem;font-weight:800;margin-bottom:10px}
+  .retro-banner p{color:#c9c9d8;font-size:.95rem}
+
+  /* terminal */
+  .term{background:#0b0b12;border:1px solid var(--line);border-radius:12px;overflow-x:auto;margin-top:26px}
+  .term .bar{display:flex;gap:6px;padding:10px 14px;border-bottom:1px solid var(--line)}
+  .term .bar i{width:11px;height:11px;border-radius:50%;display:inline-block}
+  .term pre{font-family:var(--mono);font-size:.82rem;line-height:1.6;padding:16px 18px;color:#d8d8e6;margin:0;white-space:pre}
+  .term .c{color:var(--mount)} .term .d{color:var(--muted)} .term .g{color:var(--gold)}
 
   /* fs band */
   .band{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--surface);
@@ -192,6 +219,37 @@
   <span><b>Btrfs</b> <span data-i18n="band_detect">detección</span></span>
 </div></div>
 
+<section id="showcase"><div class="wrap">
+  <span class="eyebrow" data-i18n="show_eyebrow">Capturas reales</span>
+  <h2 data-i18n="show_h2">Así se ve de verdad</h2>
+  <div class="shots">
+    <figure class="shot">
+      <img src="assets/panel.png" alt="Panel de Omnimount con una tarjeta ArkOS" width="680" height="588" loading="lazy">
+      <figcaption data-i18n="show_cap1">El panel con una tarjeta ArkOS real: detección automática, montar y expulsar con un clic.</figcaption>
+    </figure>
+    <figure class="shot">
+      <img src="assets/setup.png" alt="Asistente de configuración de Omnimount" width="1120" height="1024" loading="lazy">
+      <figcaption data-i18n="show_cap2">El asistente de configuración comprueba cada dependencia y permiso en vivo.</figcaption>
+    </figure>
+  </div>
+
+  <div class="term">
+    <div class="bar"><i style="background:#e0645b"></i><i style="background:#d9ae35"></i><i style="background:#35c46f"></i></div>
+    <pre><span class="c">$ omnimount list</span>
+disk4 (53.74 GB) — MassStorageClass
+  disk4s1  805.3 MB  FAT32 «ARKOS-128G»  <span class="d">montada</span>
+  disk4s2  466.4 MB  <span class="g">ext4 «STORAGE»</span>  <span class="d">sin montar</span>
+  disk4s3  51.16 GB  FAT32 «EASYROMS»  <span class="d">sin montar</span>
+  🎮 Detectada tarjeta de ArkOS: EASYROMS contiene tus roms
+
+<span class="c">$ sudo omnimount test disk4s2</span>
+1/4 Montando disk4s2 (ext4)…      Montado en /Volumes/STORAGE
+2/4 Prueba de escritura…          Escritura y relectura correctas ✓
+3/4 Desmontando…                  Desmontado ✓
+4/4 Verificando con fsck…         Sistema de ficheros limpio ✓</pre>
+  </div>
+</div></section>
+
 <section id="features"><div class="wrap">
   <span class="eyebrow" data-i18n="feat_eyebrow">Qué hace</span>
   <h2 data-i18n="feat_h2">Todo lo que macOS no quiso hacer por ti</h2>
@@ -204,6 +262,29 @@
     <div class="card"><span class="tag">clone · format</span><h3 data-i18n="f6_t">Clona y formatea</h3><p data-i18n="f6_p">Copia de seguridad de la SD completa a .img con barra de progreso, y formateo ext4/NTFS/FAT32/exFAT con confirmación doble.</p></div>
   </div>
 </div></section>
+
+<section id="usecases" style="padding-top:0"><div class="wrap">
+  <span class="eyebrow" data-i18n="uc_eyebrow">Casos de uso</span>
+  <h2 data-i18n="uc_h2">Para mucho más que jugar</h2>
+  <div class="grid">
+    <div class="card"><span class="tag">NTFS</span><h3 data-i18n="uc1_t">Discos de Windows</h3><p data-i18n="uc1_p">Escribe en el disco externo de tu PC, en el de Bootcamp o en el USB de la oficina — macOS solo los lee; Omnimount también escribe.</p></div>
+    <div class="card"><span class="tag">ext4</span><h3 data-i18n="uc2_t">Raspberry Pi y servidores</h3><p data-i18n="uc2_p">Edita el config.txt de tu Pi, revisa los logs de un servidor caído o prepara una SD de arranque sin salir del Mac.</p></div>
+    <div class="card"><span class="tag">rescue</span><h3 data-i18n="uc3_t">Recuperación de datos</h3><p data-i18n="uc3_p">Ese disco viejo de un NAS o de un portátil con Linux: conéctalo, monta su ext4 y saca tus ficheros. Clónalo entero a .img antes si el disco está delicado.</p></div>
+    <div class="card"><span class="tag">retro</span><h3 data-i18n="uc4_t">Consolas retro</h3><p data-i18n="uc4_p">ArkOS, Batocera, ROCKNIX, muOS… detecta el firmware, hace visibles sus particiones y gestiona roms y saves con copia de seguridad.</p></div>
+    <div class="card"><span class="tag">dual-boot</span><h3 data-i18n="uc5_t">Linux y macOS conviviendo</h3><p data-i18n="uc5_p">Si arrancas Linux en otro equipo o partición, comparte datos entre ambos mundos sin pendrives FAT de por medio.</p></div>
+    <div class="card"><span class="tag">img</span><h3 data-i18n="uc6_t">Imágenes y tarjetas</h3><p data-i18n="uc6_p">Clona SDs completas con progreso, restáuralas, y formatea en ext4, NTFS, FAT32 o exFAT con doble confirmación.</p></div>
+  </div>
+</div></section>
+
+<div class="wrap" style="padding-bottom:76px">
+  <div class="retro-banner">
+    <img src="assets/retro-hero.jpg" alt="" loading="lazy">
+    <div class="inner">
+      <h3 data-i18n="retro_h3">Cualquier disco, de donde venga</h3>
+      <p data-i18n="retro_p">Un disco NTFS de tu PC, la SD de una Raspberry Pi, el ext4 de un servidor o la tarjeta de tu consola retro: si tiene datos, tu Mac ahora puede leerlos y escribirlos.</p>
+    </div>
+  </div>
+</div>
 
 <section id="install" style="background:var(--surface);border-top:1px solid var(--line);border-bottom:1px solid var(--line)"><div class="wrap">
   <span class="eyebrow" data-i18n="how_eyebrow">Instalación</span>
@@ -270,6 +351,18 @@
 const I18N = {
   en: {
     nav_source:"Source code", nav_pricing:"Pricing", foot_pricing:"Pricing",
+    show_eyebrow:"Real screenshots", show_h2:"What it actually looks like",
+    show_cap1:"The panel with a real ArkOS card: automatic detection, one-click mount and eject.",
+    show_cap2:"The setup assistant live-checks every dependency and permission.",
+    retro_h3:"Any disk, wherever it came from",
+    retro_p:"An NTFS drive from your PC, a Raspberry Pi SD card, a server's ext4 disk or your retro handheld's card: if it holds data, your Mac can now read and write it.",
+    uc_eyebrow:"Use cases", uc_h2:"For much more than gaming",
+    uc1_t:"Windows drives", uc1_p:"Write to your PC's external drive, your Bootcamp disk or the office USB stick — macOS only reads them; Omnimount writes too.",
+    uc2_t:"Raspberry Pi & servers", uc2_p:"Edit your Pi's config.txt, inspect logs from a dead server or prepare a boot SD without leaving your Mac.",
+    uc3_t:"Data recovery", uc3_p:"That old NAS or Linux laptop drive: plug it in, mount its ext4 and rescue your files. Clone it to .img first if the disk is fragile.",
+    uc4_t:"Retro consoles", uc4_p:"ArkOS, Batocera, ROCKNIX, muOS… detects the firmware, unhides their partitions and manages roms and saves with backups.",
+    uc5_t:"Linux and macOS side by side", uc5_p:"If you boot Linux on another machine or partition, share data between both worlds without FAT thumb drives in between.",
+    uc6_t:"Images & cards", uc6_p:"Clone full SDs with progress, restore them, and format ext4, NTFS, FAT32 or exFAT with double confirmation.",
     hero_eyebrow:"ext4 · NTFS · read/write · macOS 13+ · Apple Silicon",
     hero_h1:'Your Mac finally reads <span class="ok">every disk</span>',
     hero_sub:"Mount, write, format and clone ext4 and NTFS partitions from your menu bar. No kernel extensions, no lowering your Mac's security, no password prompts on every mount.",
