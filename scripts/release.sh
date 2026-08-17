@@ -8,7 +8,7 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_DIR"
-VERSION="0.1.0"
+VERSION="0.1.1"
 SKIP_NOTARIZE="${1:-}"
 
 echo "=== 1/4 App firmada ==="
@@ -36,6 +36,14 @@ fi
 echo ""
 echo "=== 3/4 Notarización ==="
 ./scripts/notarize.sh "$PKG"
+
+echo ""
+echo "=== Feed de actualizaciones (Sparkle) ==="
+mkdir -p dist/updates
+ditto -c -k --keepParent dist/Omnimount.app "dist/updates/Omnimount-$VERSION.zip"
+./vendor/bin/generate_appcast --account Omnimount \
+    --download-url-prefix "https://omnimount.es/updates/" dist/updates
+echo "appcast generado en dist/updates/"
 
 echo ""
 echo "=== 4/4 Verificación final ==="

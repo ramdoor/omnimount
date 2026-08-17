@@ -57,6 +57,10 @@ struct MenuContentView: View {
 
             HStack {
                 Button(L10n.t("Actualizar", "Refresh")) { monitor.refresh() }
+                Button(L10n.t("Actualizaciones…", "Updates…")) {
+                    Updater.controller.checkForUpdates(nil)
+                    NSApp.activate(ignoringOtherApps: true)
+                }
                 Button(L10n.t("Configuración…", "Setup…")) {
                     openWindow(id: "setup")
                     NSApp.activate(ignoringOtherApps: true)

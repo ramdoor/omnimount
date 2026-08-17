@@ -1,6 +1,14 @@
 import AppKit
 import SwiftUI
+import Sparkle
 import OmnimountKit
+
+/// Actualizador Sparkle compartido (feed en omnimount.es/appcast.xml,
+/// configurado vía Info.plist: SUFeedURL + SUPublicEDKey).
+enum Updater {
+    static let controller = SPUStandardUpdaterController(
+        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+}
 
 @main
 struct OmnimountApp: App {
