@@ -11,8 +11,13 @@ struct MenuContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Omnimount")
-                .font(.headline)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("Omnimount")
+                    .font(.headline)
+                Text("v" + (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
 
             if let retro = monitor.retroMatch {
                 Label {
