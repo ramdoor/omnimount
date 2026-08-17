@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contacto — Omnimount</title>
+<link rel="stylesheet" href="legal-style.css">
+<style>
+  form{display:flex;flex-direction:column;gap:14px;max-width:480px;margin:24px 0}
+  label{font-size:.9rem;color:var(--muted)}
+  input,textarea{background:var(--surface);border:1px solid var(--line);border-radius:9px;
+    color:var(--ink);font:inherit;padding:11px 13px;width:100%}
+  input:focus,textarea:focus{outline:2px solid var(--mount);outline-offset:1px;border-color:transparent}
+  textarea{min-height:150px;resize:vertical}
+  button{background:var(--mount);color:#0a1410;font-weight:700;font-size:1rem;border:none;
+    border-radius:10px;padding:13px 24px;cursor:pointer;align-self:flex-start}
+  button:hover{background:#40d67d}
+  button:disabled{opacity:.5;cursor:default}
+  .hp{position:absolute;left:-9999px;opacity:0;height:0;overflow:hidden}
+  .msg{border-radius:9px;padding:12px 16px;font-size:.92rem;display:none}
+  .msg.ok{background:rgba(53,196,111,.12);border:1px solid rgba(53,196,111,.4);color:var(--mount)}
+  .msg.err{background:rgba(224,91,91,.12);border:1px solid rgba(224,91,91,.4);color:#e05b5b}
+</style>
+<script defer data-domain="omnimount.es" src="https://plausible.alfeonrobotics.com/js/script.js"></script>
+</head>
+<body>
+<header><div class="wrap"><a href="/">Omnimount</a><span>· Contacto / Contact</span></div></header>
+<div class="wrap">
+
+<h1>Contacto</h1>
+<p>Soporte, dudas antes de comprar, <a href="refunds.html">reembolsos</a> o
+cualquier otra cosa — si has comprado, incluye el email del recibo de Paddle.
+Respondemos normalmente en 24–48 h.</p>
+<p class="updated" style="margin-top:6px">Support, pre-sales questions or
+<a href="refunds.html">refunds</a> — if you purchased, include your Paddle
+receipt email. We usually reply within 24–48 h.</p>
+
+<form id="f">
+  <div>
+    <label for="name">Nombre / Name</label>
+    <input id="name" name="name" required maxlength="200" autocomplete="name">
+  </div>
+  <div>
+    <label for="email">Tu email / Your email</label>
+    <input id="email" name="email" type="email" required maxlength="320" autocomplete="email">
+  </div>
+  <div>
+    <label for="message">Mensaje / Message</label>
+    <textarea id="message" name="message" required maxlength="5000"></textarea>
+  </div>
+  <div class="hp" aria-hidden="true">
+    <label for="web">Web</label>
+    <input id="web" name="web" tabindex="-1" autocomplete="off">
+  </div>
+  <button type="submit" id="send">Enviar / Send</button>
+  <div class="msg ok" id="ok">Mensaje enviado — gracias. / Message sent — thank you.</div>
+  <div class="msg err" id="err">No se pudo enviar; inténtalo de nuevo en un rato. / Could not send; please try again later.</div>
+</form>
+
+</div>
+<script>
+document.getElementById("f").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById("send");
+  btn.disabled = true;
+  const body = Object.fromEntries(new FormData(e.target));
+  try {
+    const r = await fetch("/api/contact", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error("http " + r.status);
+    document.getElementById("ok").style.display = "block";
+    document.getElementById("err").style.display = "none";
+    e.target.reset();
+    if (window.plausible) plausible("Contacto");
+  } catch {
+    document.getElementById("err").style.display = "block";
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8"><meta name="robots" content="noindex"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gracias — Omnimount</title>
 <link rel="stylesheet" href="legal-style.css">
 <style>
@@ -21,7 +21,7 @@
 
 <h1>¡Gracias por comprar Omnimount! 🎉</h1>
 <p>Tu recibo llegará por email desde Paddle. Aquí tienes tu descarga:</p>
-<a class="dl" href="/downloads/Omnimount-0.1.0.pkg" onclick="if(window.plausible)plausible('Descarga')">⬇ Descargar Omnimount 0.1.0 (.pkg)</a>
+<a class="dl dl-link" href="#" onclick="if(window.plausible)plausible('Descarga')">⬇ Descargar Omnimount 0.1.0 (.pkg)</a>
 
 <div class="box">
 <h2>Siguientes pasos</h2>
@@ -32,8 +32,7 @@
 </ol>
 </div>
 
-<p>¿Dudas o problemas? Escríbenos con tu recibo:
-<a href="mailto:ramdoor@users.noreply.github.com">ramdoor@users.noreply.github.com</a> —
+<p>¿Dudas o problemas? Escríbenos por el <a href="contact.html">formulario de contacto</a> con tu recibo —
 y recuerda que tienes <a href="refunds.html">14 días de devolución</a> sin preguntas.</p>
 
 <hr>
@@ -41,7 +40,7 @@ y recuerda que tienes <a href="refunds.html">14 días de devolución</a> sin pre
 <span class="lang-note">English</span>
 <h1>Thanks for buying Omnimount! 🎉</h1>
 <p>Your receipt is on its way from Paddle. Here's your download:</p>
-<a class="dl" href="/downloads/Omnimount-0.1.0.pkg" onclick="if(window.plausible)plausible('Descarga')">⬇ Download Omnimount 0.1.0 (.pkg)</a>
+<a class="dl dl-link" href="#" onclick="if(window.plausible)plausible('Descarga')">⬇ Download Omnimount 0.1.0 (.pkg)</a>
 
 <div class="box">
 <h2>Next steps</h2>
@@ -52,10 +51,26 @@ y recuerda que tienes <a href="refunds.html">14 días de devolución</a> sin pre
 </ol>
 </div>
 
-<p>Questions or trouble? Write to us with your receipt:
-<a href="mailto:ramdoor@users.noreply.github.com">ramdoor@users.noreply.github.com</a> —
+<p>Questions or trouble? Write via the <a href="contact.html">contact form</a> with your receipt —
 and remember you have a <a href="refunds.html">14-day refund</a>, no questions asked.</p>
 
 </div>
+<script>
+(function() {
+  var txn = new URLSearchParams(location.search).get("txn") || "";
+  var ok = /^txn_[a-z0-9]{20,40}$/.test(txn);
+  document.querySelectorAll(".dl-link").forEach(function(a) {
+    if (ok) {
+      a.href = "/api/download?txn=" + txn;
+    } else {
+      a.style.display = "none";
+      var aviso = document.createElement("p");
+      aviso.innerHTML = "El enlace de descarga se genera al completar la compra. Si ya compraste y no lo tienes, escríbenos por el <a href=\"contact.html\">formulario de contacto</a> con tu recibo de Paddle y te lo reenviamos. / The download link is generated when your purchase completes. Already bought? Use the <a href=\"contact.html\">contact form</a> with your Paddle receipt and we will resend it.";
+      aviso.style.cssText = "background:rgba(217,174,53,.12);border:1px solid rgba(217,174,53,.4);color:#d9ae35;border-radius:9px;padding:12px 16px;font-size:.92rem";
+      a.parentNode.insertBefore(aviso, a);
+    }
+  });
+})();
+</script>
 </body>
 </html>
