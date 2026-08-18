@@ -171,7 +171,7 @@ struct SetupView: View {
     }
 
     private func refresh() {
-        if FileManager.default.fileExists(atPath: "/usr/local/lib/libfuse-t.dylib") {
+        if ToolLocator.isFuseTInstalled {
             fuseLayer = .fuseT
         } else if ToolLocator.isMacFUSEInstalled {
             fuseLayer = .macFUSE
