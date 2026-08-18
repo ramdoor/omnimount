@@ -24,11 +24,17 @@ final class MountController: ObservableObject {
         // Detectar el cambio de versión y re-registrarlo automáticamente.
         let current = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
         let previous = UserDefaults.standard.string(forKey: "lastRunVersion")
-        UserDefaults.standard.set(current, forKey: "lastRunVersion")
-        if let previous, previous != current, helper.state == .enabled {
+        // previous == nil también cuenta como cambio: quien actualiza desde
+        // versiones sin esta clave (≤0.1.3) es justo quien necesita el repair.
+        // La clave se persiste tras reparar, no antes: si la app muere en la
+        // ventana de 2 s, el próximo arranque lo reintenta.
+        if previous != current, helper.state == .enabled {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
                 self?.helper.repair()
+                UserDefaults.standard.set(current, forKey: "lastRunVersion")
             }
+        } else {
+            UserDefaults.standard.set(current, forKey: "lastRunVersion")
         }
     }
 

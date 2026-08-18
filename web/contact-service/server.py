@@ -42,12 +42,17 @@ PKG_INTERNAL = "/protected/Omnimount.pkg"  # location interna de nginx
 MAX_LEN = {"name": 200, "email": 320, "message": 5000}
 TXN_RE = re.compile(r"^txn_[a-z0-9]{20,40}$")
 RATE: dict = {}
+RATE_LOCK = threading.Lock()
 
 
 def rate_limited(ip, limit=10):
     now = time.time()
-    hits = [t for t in RATE.get(ip, []) if now - t < 3600]
-    RATE[ip] = hits + [now]
+    with RATE_LOCK:
+        hits = [t for t in RATE.get(ip, []) if now - t < 3600]
+        RATE[ip] = hits + [now]
+        # purgar entradas caducadas de otras IPs para no crecer sin límite
+        for k in [k for k, v in RATE.items() if not v or now - v[-1] > 3600]:
+            del RATE[k]
     return len(hits) >= limit
 
 
@@ -89,6 +94,10 @@ def paddle_transaction_paid(txn: str):
         return data.get("data", {}).get("status") in ("paid", "completed", "billed")
     except urllib.error.HTTPError as e:
         if e.code == 404:
+            return False
+        if e.code in (401, 403):
+            # Clave mal configurada o revocada: cerrar la puerta, no abrirla.
+            print(f"clave Paddle rechazada ({e.code}); deniego {txn}", flush=True)
             return False
         return None
     except Exception:

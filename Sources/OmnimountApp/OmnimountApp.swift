@@ -22,7 +22,7 @@ struct OmnimountApp: App {
         // dejaría un proceso colgado esperando eternamente.
         let args = CommandLine.arguments.dropFirst()
         if !args.isEmpty && !args.allSatisfy({ $0.hasPrefix("-") }) {
-            FileHandle.standardError.write(Data((L10n.t("Esto es la app de menú Omnimount, no el CLI. Usa el binario omnimount-cli.", "This is the Omnimount menu bar app, not the CLI. Use the omnimount-cli binary.") + "\n").utf8))
+            FileHandle.standardError.write(Data((L10n.t("Esto es la app de menú Omnimount, no el CLI. Usa el comando omnimount (/usr/local/bin/omnimount).", "This is the Omnimount menu bar app, not the CLI. Use the omnimount command (/usr/local/bin/omnimount).") + "\n").utf8))
             exit(64)
         }
     }
@@ -48,5 +48,9 @@ struct OmnimountApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        // Instanciar el updater ya: al ser `static let` (perezoso), si nadie
+        // lo toca hasta pulsar "Actualizaciones…" las comprobaciones
+        // automáticas de Sparkle no llegan a programarse nunca.
+        _ = Updater.controller
     }
 }

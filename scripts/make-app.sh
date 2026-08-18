@@ -51,8 +51,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key>              <string>Omnimount</string>
     <key>CFBundleDisplayName</key>       <string>Omnimount</string>
     <key>CFBundleIdentifier</key>        <string>org.omnimount.app</string>
-    <key>CFBundleVersion</key>           <string>0.1.3</string>
-    <key>CFBundleShortVersionString</key><string>0.1.3</string>
+    <key>CFBundleVersion</key>           <string>0.1.4</string>
+    <key>CFBundleShortVersionString</key><string>0.1.4</string>
     <key>CFBundleExecutable</key>        <string>Omnimount</string>
     <key>CFBundleIconFile</key>          <string>AppIcon</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>
@@ -104,10 +104,10 @@ ENTITLEMENTS="$REPO_DIR/scripts/tools.entitlements"
 # shellcheck disable=SC2086  # RUNTIME_FLAGS debe expandirse en palabras
 # Componentes anidados de Sparkle (requisito de notarización).
 SPK="$FRAMEWORKS/Sparkle.framework"
-codesign --force $RUNTIME_FLAGS --sign "${SIGN_ID:--}" "$SPK/Versions/B/XPCServices/Installer.xpc"
-codesign --force $RUNTIME_FLAGS --preserve-metadata=entitlements --sign "${SIGN_ID:--}" "$SPK/Versions/B/XPCServices/Downloader.xpc"
-codesign --force $RUNTIME_FLAGS --sign "${SIGN_ID:--}" "$SPK/Versions/B/Autoupdate"
-codesign --force $RUNTIME_FLAGS --sign "${SIGN_ID:--}" "$SPK/Versions/B/Updater.app"
+codesign --force $RUNTIME_FLAGS --preserve-metadata=identifier,entitlements,flags,runtime --sign "${SIGN_ID:--}" "$SPK/Versions/B/XPCServices/Installer.xpc"
+codesign --force $RUNTIME_FLAGS --preserve-metadata=identifier,entitlements,flags,runtime --sign "${SIGN_ID:--}" "$SPK/Versions/B/XPCServices/Downloader.xpc"
+codesign --force $RUNTIME_FLAGS --preserve-metadata=identifier,entitlements,flags,runtime --sign "${SIGN_ID:--}" "$SPK/Versions/B/Autoupdate"
+codesign --force $RUNTIME_FLAGS --preserve-metadata=identifier,entitlements,flags,runtime --sign "${SIGN_ID:--}" "$SPK/Versions/B/Updater.app"
 codesign --force $RUNTIME_FLAGS --sign "${SIGN_ID:--}" "$SPK"
 
 codesign --force $RUNTIME_FLAGS --identifier org.omnimount.helper --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/OmnimountHelper"

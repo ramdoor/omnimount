@@ -8,7 +8,7 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_DIR"
-VERSION="0.1.3"
+VERSION="0.1.4"
 SKIP_NOTARIZE="${1:-}"
 
 echo "=== 1/4 App firmada ==="
