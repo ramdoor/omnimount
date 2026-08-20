@@ -1,6 +1,6 @@
 # Omnimount
 
-🌍 [English version](README.md) · 🛒 [Compra la versión lista para usar](https://omnimount.toucedo.com)
+🌍 [English version](README.md) · 🛒 [Compra la versión lista para usar](https://omnimount.es)
 
 Acceso de **lectura y escritura** a sistemas de ficheros que macOS no soporta
 de forma nativa — **ext2/ext3/ext4** y **NTFS** — desde una app de barra de

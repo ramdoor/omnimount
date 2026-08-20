@@ -9,7 +9,7 @@ default, kext-free; [macFUSE] as an alternative).
 Built especially for retro-console SD cards (ArkOS, Batocera, ROCKNIX,
 muOS…), which mix FAT partitions with ext4 partitions invisible to macOS.
 
-🌍 [Versión en español](README.es.md) · 🛒 [Buy the ready-made build](https://omnimount.toucedo.com)
+🌍 [Versión en español](README.es.md) · 🛒 [Buy the ready-made build](https://omnimount.es)
 
 - **Requirements**: macOS 13+, Apple Silicon (Intel should work, untested).
 - **License**: GPL-3.0-or-later (fuse2fs and ntfs-3g are GPL).
@@ -189,7 +189,7 @@ use `--scratch-path` outside the repo for that reason.
 - NTFS over the FUSE-T backend is pending validation (Homebrew's ntfs-3g
   links against macFUSE's libraries).
 - FUSE binaries aren't bundled with the open source build: they must be
-  installed. (The [paid build](https://omnimount.toucedo.com) bundles
+  installed. (The [paid build](https://omnimount.es) bundles
   everything.)
 - Verification fsck is non-destructive (`e2fsck -fn`, `ntfsfix -n`): it
   reports, it doesn't repair.
