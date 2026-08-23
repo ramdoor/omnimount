@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Editar una tarjeta SD de ArkOS / R36S desde tu Mac</title>
+<meta name="description" content="Tu Mac no ve la partición EASYROMS ni puede leer la partición de sistema ext4 de una tarjeta ArkOS. Aquí el porqué, y cómo añadir ROMs desde macOS.">
+<link rel="canonical" href="https://omnimount.es/es/guides/arkos-sd-card-mac.html">
+<link rel="alternate" hreflang="en" href="https://omnimount.es/guides/arkos-sd-card-mac.html">
+<link rel="alternate" hreflang="es" href="https://omnimount.es/es/guides/arkos-sd-card-mac.html">
+<link rel="alternate" hreflang="x-default" href="https://omnimount.es/guides/arkos-sd-card-mac.html">
+<link rel="stylesheet" href="/legal-style.css">
+<style>
+  pre{background:var(--surface);border:1px solid var(--line);border-radius:9px;
+    padding:14px 16px;overflow-x:auto;margin:12px 0;font-family:var(--mono);
+    font-size:.85rem;color:var(--ink);line-height:1.5}
+  code{font-family:var(--mono);font-size:.9em;background:var(--surface);
+    border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+  pre code{border:none;background:none;padding:0}
+  .cta{background:rgba(53,196,111,.08);border:1px solid rgba(53,196,111,.35);
+    border-radius:12px;padding:20px 22px;margin:36px 0}
+  .cta p{margin-bottom:10px}
+  .cta a.btn{display:inline-block;background:var(--mount);color:#0a1410;font-weight:700;
+    border-radius:9px;padding:10px 20px;text-decoration:none;margin-right:10px}
+  .cta a.gh{color:var(--muted)}
+  .meta{font-family:var(--mono);font-size:.78rem;color:var(--muted);margin-bottom:28px}
+</style>
+<script defer data-domain="omnimount.es" src="https://plausible.alfeonrobotics.com/js/script.js"></script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "Article", "headline": "Editar una tarjeta SD de ArkOS / R36S desde tu Mac", "inLanguage": "es", "datePublished": "2026-08-23", "author": {"@type": "Organization", "name": "Omnimount"}, "publisher": {"@type": "Organization", "name": "Omnimount", "url": "https://omnimount.es/"}, "mainEntityOfPage": "https://omnimount.es/es/guides/arkos-sd-card-mac.html"}</script>
+</head>
+<body>
+<header><div class="wrap"><a href="/es/">Omnimount</a><span>· Guías</span>
+<span style="margin-left:auto"><a href="https://omnimount.es/guides/arkos-sd-card-mac.html">EN</a></span></div></header>
+<div class="wrap">
+<h1>Editar una tarjeta SD de ArkOS / R36S desde tu Mac</h1>
+<p class="meta">Actualizado agosto 2026 · ArkOS, Batocera, ROCKNIX, muOS</p>
+
+<p>Flasheas ArkOS para tu R36S, arranca, funciona — y al meter la tarjeta SD en el Mac para
+añadir juegos, o no aparece nada o sale el aviso de "disco no legible". Pasan dos cosas
+distintas, y las dos tienen arreglo sin pedirle el PC con Windows a nadie.</p>
+
+<h2>Problema 1: la partición de roms está oculta</h2>
+<p>ArkOS entrega su partición FAT32 de roms (<b>EASYROMS</b>) con el tipo de partición MBR
+puesto a <code>0x1C</code>: "FAT32 oculta". Windows ignora esa marca — por eso las guías
+dicen "usa Windows y ya". macOS la respeta y se niega a montar el volumen, aunque podría
+leerlo perfectamente. El arreglo es cambiar un byte de la tabla de particiones para que el
+tipo sea FAT32 normal (<code>0x0C</code>). Es permanente, inofensivo, y a la consola le da
+igual. Omnimount lo hace con el comando <i>Mostrar</i>; en Linux usarías <code>sfdisk</code>.</p>
+
+<h2>Problema 2: la partición de sistema es ext4</h2>
+<p>Configs, temas, partidas guardadas y el propio sistema viven en una partición ext4, que
+macOS no puede leer. Para editar esos ficheros desde un Mac necesitas un driver ext4 — mira
+la <a href="read-write-ext4-mac.html">guía completa de ext4 en Mac</a>. Con Omnimount la
+partición aparece en la barra de menú con su botón Montar, como un volumen más.</p>
+
+<h2>Añadir ROMs y BIOS</h2>
+<ul>
+<li>Muestra EASYROMS una vez → a partir de ahí monta sola, en cualquier sistema.</li>
+<li>Arrastra las ROMs a sus carpetas (<code>roms/gba</code>, <code>roms/snes</code>…) en el Finder.</li>
+<li>Los ficheros de BIOS van donde tu firmware los espere — consulta su wiki.</li>
+<li>Expulsa bien antes de sacar la tarjeta. FAT32 no tiene journal: arrancarla en plena
+copia es la causa nº 1 de bibliotecas corruptas.</li>
+</ul>
+
+<h2>Si la tarjeta deja de arrancar</h2>
+<p>Pasa una comprobación al sistema de archivos ext4 (<code>e2fsck</code>, o el botón
+<i>Comprobar</i> de Omnimount) — una consola congelada guardando suele dejar el journal
+sucio. Y antes de cualquier actualización de firmware, clona la tarjeta entera a una imagen
+para poder restaurarla en minutos: mira la <a href="clone-sd-card-mac.html">guía de clonado</a>.</p>
+<div class="cta">
+<p><b style="color:var(--ink)">Olvídate del terminal.</b> Omnimount hace todo lo de esta página desde la
+barra de menú: monta, escribe, formatea, repara y clona discos ext4 y NTFS — sin extensiones del kernel,
+sin Recovery Mode y sin contraseñas en cada montaje.</p>
+<a class="btn" href="/es/">Consigue Omnimount — 9,99 €</a>
+<a class="gh" href="https://github.com/ramdoor/omnimount">o compílalo gratis (GPL)</a>
+</div>
+</div>
+</body>
+</html>

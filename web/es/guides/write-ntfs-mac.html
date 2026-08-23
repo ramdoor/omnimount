@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cómo escribir en discos NTFS en macOS (2026)</title>
+<meta name="description" content="macOS monta NTFS en solo lectura. Todas las formas de conseguir escritura NTFS en un Mac en 2026 — opciones open source gratis, drivers de pago y qué evitar.">
+<link rel="canonical" href="https://omnimount.es/es/guides/write-ntfs-mac.html">
+<link rel="alternate" hreflang="en" href="https://omnimount.es/guides/write-ntfs-mac.html">
+<link rel="alternate" hreflang="es" href="https://omnimount.es/es/guides/write-ntfs-mac.html">
+<link rel="alternate" hreflang="x-default" href="https://omnimount.es/guides/write-ntfs-mac.html">
+<link rel="stylesheet" href="/legal-style.css">
+<style>
+  pre{background:var(--surface);border:1px solid var(--line);border-radius:9px;
+    padding:14px 16px;overflow-x:auto;margin:12px 0;font-family:var(--mono);
+    font-size:.85rem;color:var(--ink);line-height:1.5}
+  code{font-family:var(--mono);font-size:.9em;background:var(--surface);
+    border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+  pre code{border:none;background:none;padding:0}
+  .cta{background:rgba(53,196,111,.08);border:1px solid rgba(53,196,111,.35);
+    border-radius:12px;padding:20px 22px;margin:36px 0}
+  .cta p{margin-bottom:10px}
+  .cta a.btn{display:inline-block;background:var(--mount);color:#0a1410;font-weight:700;
+    border-radius:9px;padding:10px 20px;text-decoration:none;margin-right:10px}
+  .cta a.gh{color:var(--muted)}
+  .meta{font-family:var(--mono);font-size:.78rem;color:var(--muted);margin-bottom:28px}
+</style>
+<script defer data-domain="omnimount.es" src="https://plausible.alfeonrobotics.com/js/script.js"></script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "Article", "headline": "Cómo escribir en discos NTFS en macOS (2026)", "inLanguage": "es", "datePublished": "2026-08-23", "author": {"@type": "Organization", "name": "Omnimount"}, "publisher": {"@type": "Organization", "name": "Omnimount", "url": "https://omnimount.es/"}, "mainEntityOfPage": "https://omnimount.es/es/guides/write-ntfs-mac.html"}</script>
+</head>
+<body>
+<header><div class="wrap"><a href="/es/">Omnimount</a><span>· Guías</span>
+<span style="margin-left:auto"><a href="https://omnimount.es/guides/write-ntfs-mac.html">EN</a></span></div></header>
+<div class="wrap">
+<h1>Cómo escribir en discos NTFS en macOS</h1>
+<p class="meta">Actualizado agosto 2026 · válido para macOS 13–15</p>
+
+<p>macOS lee NTFS de serie pero lo monta en silencio como solo lectura: puedes copiar
+ficheros <i>desde</i> el disco externo de tu PC, pero no meter nada en él. Estas son las
+formas reales de conseguir escritura, con sus contrapartidas.</p>
+
+<h2>Opción 1: ntfs-3g sobre FUSE (open source)</h2>
+<p><code>ntfs-3g</code> es el driver NTFS open source de referencia — el mismo que usa
+cualquier distribución de Linux. En un Mac corre sobre una capa FUSE: o macFUSE (una
+extensión del kernel, que en Apple Silicon implica Recovery y seguridad reducida) o FUSE-T
+(sin kext). Esta es la pila que trae Omnimount: ntfs-3g sobre FUSE-T, envuelto en una app
+de barra de menú.</p>
+
+<h2>Opción 2: drivers comerciales</h2>
+<p>Paragon NTFS (~20 €/equipo, con actualizaciones casi de suscripción) y Tuxera NTFS
+(~40 €) instalan sus propios drivers con buen rendimiento y soporte del fabricante.
+Productos sólidos; pagas la comodidad del código cerrado. Mounty, herramienta gratuita muy
+conocida, merece un aviso: activa el modo de escritura NTFS <i>experimental</i> de Apple,
+que la propia Apple nunca activó por defecto — los informes de corrupción son lo bastante
+frecuentes como para no acercarlo a datos que te importen.</p>
+
+<h2>Opción 3: reformatear a exFAT</h2>
+<p>Si el disco no necesita seguir en NTFS, exFAT se lee y escribe en todas partes —
+Windows, macOS, Linux, televisores. Es la respuesta correcta para un disco externo
+compartido que controlas tú. No sirve para particiones de Boot Camp, el disco de otra
+persona o unidades con ACLs de Windows — y ojo: exFAT no tiene journal, así que perdona
+peor los tirones de cable.</p>
+
+<h2>Antes de escribir en cualquier NTFS</h2>
+<ul>
+<li>Si el "Inicio rápido" de Windows hibernó el disco, el montaje saldrá de solo lectura o
+fallará — arranca Windows y apaga del todo, o monta con la opción <code>remove_hiberfile</code>.</li>
+<li>Expulsa antes de desconectar; NTFS tiene journal, pero un fichero a medio escribir se pierde igual.</li>
+<li>Los discos cifrados con Bitlocker no los abre ningún driver NTFS de macOS — desbloquéalos antes en Windows.</li>
+</ul>
+<div class="cta">
+<p><b style="color:var(--ink)">Olvídate del terminal.</b> Omnimount hace todo lo de esta página desde la
+barra de menú: monta, escribe, formatea, repara y clona discos ext4 y NTFS — sin extensiones del kernel,
+sin Recovery Mode y sin contraseñas en cada montaje.</p>
+<a class="btn" href="/es/">Consigue Omnimount — 9,99 €</a>
+<a class="gh" href="https://github.com/ramdoor/omnimount">o compílalo gratis (GPL)</a>
+</div>
+</div>
+</body>
+</html>

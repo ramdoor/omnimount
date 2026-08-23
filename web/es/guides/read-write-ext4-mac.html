@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cómo leer y escribir discos ext4 en un Mac (2026)</title>
+<meta name="description" content="macOS no puede leer ext4 en absoluto. Todas las opciones para montar discos Linux ext4 en un Mac con escritura — gratis y de pago, con y sin extensiones del kernel.">
+<link rel="canonical" href="https://omnimount.es/es/guides/read-write-ext4-mac.html">
+<link rel="alternate" hreflang="en" href="https://omnimount.es/guides/read-write-ext4-mac.html">
+<link rel="alternate" hreflang="es" href="https://omnimount.es/es/guides/read-write-ext4-mac.html">
+<link rel="alternate" hreflang="x-default" href="https://omnimount.es/guides/read-write-ext4-mac.html">
+<link rel="stylesheet" href="/legal-style.css">
+<style>
+  pre{background:var(--surface);border:1px solid var(--line);border-radius:9px;
+    padding:14px 16px;overflow-x:auto;margin:12px 0;font-family:var(--mono);
+    font-size:.85rem;color:var(--ink);line-height:1.5}
+  code{font-family:var(--mono);font-size:.9em;background:var(--surface);
+    border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+  pre code{border:none;background:none;padding:0}
+  .cta{background:rgba(53,196,111,.08);border:1px solid rgba(53,196,111,.35);
+    border-radius:12px;padding:20px 22px;margin:36px 0}
+  .cta p{margin-bottom:10px}
+  .cta a.btn{display:inline-block;background:var(--mount);color:#0a1410;font-weight:700;
+    border-radius:9px;padding:10px 20px;text-decoration:none;margin-right:10px}
+  .cta a.gh{color:var(--muted)}
+  .meta{font-family:var(--mono);font-size:.78rem;color:var(--muted);margin-bottom:28px}
+</style>
+<script defer data-domain="omnimount.es" src="https://plausible.alfeonrobotics.com/js/script.js"></script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "Article", "headline": "Cómo leer y escribir discos ext4 en un Mac (2026)", "inLanguage": "es", "datePublished": "2026-08-23", "author": {"@type": "Organization", "name": "Omnimount"}, "publisher": {"@type": "Organization", "name": "Omnimount", "url": "https://omnimount.es/"}, "mainEntityOfPage": "https://omnimount.es/es/guides/read-write-ext4-mac.html"}</script>
+</head>
+<body>
+<header><div class="wrap"><a href="/es/">Omnimount</a><span>· Guías</span>
+<span style="margin-left:auto"><a href="https://omnimount.es/guides/read-write-ext4-mac.html">EN</a></span></div></header>
+<div class="wrap">
+<h1>Cómo leer y escribir discos ext4 en un Mac</h1>
+<p class="meta">Actualizado agosto 2026 · válido para macOS 13–15, Apple Silicon</p>
+
+<p>Conecta un disco formateado en Linux a un Mac y el Finder te ofrece <i>inicializarlo</i>:
+macOS no trae ningún soporte de ext4, ni siquiera de solo lectura. Si el disco contiene la
+copia de un servidor, la partición raíz de una Raspberry Pi o la biblioteca de juegos de una
+consola retro, tienes un problema. Estas son las opciones reales en 2026, de la artesanal a la de un clic.</p>
+
+<h2>Por qué macOS no lee ext4</h2>
+<p>Apple incluye drivers para APFS, HFS+, FAT32 y exFAT, más NTFS de solo lectura. Los
+sistemas de archivos de Linux nunca entraron, y desde Catalina las extensiones del kernel
+(kexts) de terceros exigen arrancar en Recovery y bajar la política de seguridad del Mac —
+por eso la respuesta clásica, macFUSE + ext4fuse, se ha vuelto tan incómoda en Apple Silicon.</p>
+
+<h2>Opción 1: FUSE-T + fuse2fs (sin extensión del kernel)</h2>
+<p><a href="https://github.com/macos-fuse-t/fuse-t">FUSE-T</a> es una implementación de FUSE
+sin kext que funciona sobre un loopback NFS local, y <code>fuse2fs</code> es la herramienta
+oficial de montaje en espacio de usuario de e2fsprogs — el mismo proyecto que mantiene ext4.
+Juntas dan lectura/escritura completa sin tocar la seguridad del Mac. La pega: el paquete de
+Homebrew no incluye fuse2fs, así que hay que compilarlo desde el código contra las cabeceras
+de FUSE-T, y montar desde el terminal como root:</p>
+<pre><code>sudo fuse2fs /dev/disk4s2 /tmp/mnt -o rw</code></pre>
+<p>Funciona muy bien — es exactamente la pila que Omnimount automatiza, con compilación
+firmada, interfaz en la barra de menú y un helper privilegiado para no teclear contraseñas.</p>
+
+<h2>Opción 2: macFUSE + ext4fuse (extensión del kernel)</h2>
+<p>La vía tradicional. En Apple Silicon exige activar la seguridad reducida desde Recovery,
+y <code>ext4fuse</code> es de solo lectura y está casi abandonado. Solo interesa si ya usas
+macFUSE para otra cosa.</p>
+
+<h2>Opción 3: una máquina virtual Linux</h2>
+<p>UTM o Lima con el disco conectado. Gratis y fiable, pero pesado: arrancas un sistema
+entero para copiar ficheros, el passthrough USB es delicado y nada se integra con el Finder.</p>
+
+<h2>Opción 4: por red</h2>
+<p>Si el disco vive en una máquina Linux que funciona, compártelo por Samba/SFTP y evita el
+montaje local. Inútil para discos sueltos y tarjetas SD, eso sí.</p>
+
+<h2>Escribir con seguridad</h2>
+<ul>
+<li>Expulsa siempre antes de desconectar — ext4 tiene journal, pero arrancar un disco en plena escritura sigue siendo arriesgado.</li>
+<li>Si el disco se desconectó a medias, pasa <code>e2fsck</code> antes de volver a montar en escritura.</li>
+<li>¿Vas a editar una partición de sistema arrancable? Haz copia antes (mira la
+<a href="clone-sd-card-mac.html">guía de clonado</a>).</li>
+</ul>
+<div class="cta">
+<p><b style="color:var(--ink)">Olvídate del terminal.</b> Omnimount hace todo lo de esta página desde la
+barra de menú: monta, escribe, formatea, repara y clona discos ext4 y NTFS — sin extensiones del kernel,
+sin Recovery Mode y sin contraseñas en cada montaje.</p>
+<a class="btn" href="/es/">Consigue Omnimount — 9,99 €</a>
+<a class="gh" href="https://github.com/ramdoor/omnimount">o compílalo gratis (GPL)</a>
+</div>
+</div>
+</body>
+</html>

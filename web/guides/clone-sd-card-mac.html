@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clone and restore SD cards on macOS (full disk or partition)</title>
+<meta name="description" content="Back up a whole SD card to an .img on your Mac and restore it later — with dd on the terminal or with a progress bar. Essential before firmware updates.">
+<link rel="canonical" href="https://omnimount.es/guides/clone-sd-card-mac.html">
+<link rel="alternate" hreflang="en" href="https://omnimount.es/guides/clone-sd-card-mac.html">
+<link rel="alternate" hreflang="es" href="https://omnimount.es/es/guides/clone-sd-card-mac.html">
+<link rel="alternate" hreflang="x-default" href="https://omnimount.es/guides/clone-sd-card-mac.html">
+<link rel="stylesheet" href="/legal-style.css">
+<style>
+  pre{background:var(--surface);border:1px solid var(--line);border-radius:9px;
+    padding:14px 16px;overflow-x:auto;margin:12px 0;font-family:var(--mono);
+    font-size:.85rem;color:var(--ink);line-height:1.5}
+  code{font-family:var(--mono);font-size:.9em;background:var(--surface);
+    border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+  pre code{border:none;background:none;padding:0}
+  .cta{background:rgba(53,196,111,.08);border:1px solid rgba(53,196,111,.35);
+    border-radius:12px;padding:20px 22px;margin:36px 0}
+  .cta p{margin-bottom:10px}
+  .cta a.btn{display:inline-block;background:var(--mount);color:#0a1410;font-weight:700;
+    border-radius:9px;padding:10px 20px;text-decoration:none;margin-right:10px}
+  .cta a.gh{color:var(--muted)}
+  .meta{font-family:var(--mono);font-size:.78rem;color:var(--muted);margin-bottom:28px}
+</style>
+<script defer data-domain="omnimount.es" src="https://plausible.alfeonrobotics.com/js/script.js"></script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "Article", "headline": "Clone and restore SD cards on macOS (full disk or partition)", "inLanguage": "en", "datePublished": "2026-08-23", "author": {"@type": "Organization", "name": "Omnimount"}, "publisher": {"@type": "Organization", "name": "Omnimount", "url": "https://omnimount.es/"}, "mainEntityOfPage": "https://omnimount.es/guides/clone-sd-card-mac.html"}</script>
+</head>
+<body>
+<header><div class="wrap"><a href="/">Omnimount</a><span>· Guides</span>
+<span style="margin-left:auto"><a href="https://omnimount.es/es/guides/clone-sd-card-mac.html">ES</a></span></div></header>
+<div class="wrap">
+<h1>Clone and restore SD cards on macOS</h1>
+<p class="meta">Updated August 2026 · works for any SD/USB drive, any filesystem</p>
+
+<p>A full-card image is the only backup that captures everything: partition table, hidden
+partitions, boot flags and filesystems macOS can't even read. Before a firmware update on
+a retro handheld or a risky change on a Raspberry Pi card, it's ten minutes that can save
+your whole setup.</p>
+
+<h2>The terminal way: dd</h2>
+<p>Find the disk, unmount it, image it:</p>
+<pre><code>diskutil list                        # find the device, e.g. /dev/disk4
+diskutil unmountDisk /dev/disk4
+sudo dd if=/dev/rdisk4 of=~/card.img bs=4m status=progress</code></pre>
+<p>Restoring is the same command with <code>if</code>/<code>of</code> swapped — and
+<b>triple-check the disk number</b>: dd to the wrong device destroys it silently. Note the
+<code>r</code> in <code>rdisk4</code> (the raw device — several times faster), and that
+on modern macOS <code>dd</code> needs Full Disk Access for the terminal.</p>
+
+<h2>Space-saving tip: clone partitions, not cards</h2>
+<p>A 128 GB card with 6 GB used still produces a 128 GB image with <code>dd</code>. Cloning
+each partition separately (or using a tool that does) keeps images as small as the data
+they contain, and lets you restore just the system partition while keeping your roms intact.</p>
+
+<h2>The one-click way</h2>
+<p>Omnimount's <i>Clone</i> does the same thing with a progress bar, a free-space check
+before it starts, automatic unmount of every partition (including FUSE mounts, which
+<code>diskutil</code> misses) and per-partition clone/restore. Same result, no disk-number
+roulette.</p>
+
+<h2>When to make an image</h2>
+<ul>
+<li>Before any firmware update (ArkOS, Batocera, ROCKNIX…).</li>
+<li>Before repartitioning or "unhiding" anything.</li>
+<li>When a card starts showing read errors — image it first, repair the copy.</li>
+<li>After you've finally got a setup exactly how you like it.</li>
+</ul>
+<div class="cta">
+<p><b style="color:var(--ink)">Skip the terminal.</b> Omnimount does everything on this page from the
+menu bar: mount, write, format, check and clone ext4 and NTFS drives — no kernel extensions,
+no Recovery Mode, no password prompts.</p>
+<a class="btn" href="/">Get Omnimount — €9.99</a>
+<a class="gh" href="https://github.com/ramdoor/omnimount">or build it free (GPL)</a>
+</div>
+</div>
+</body>
+</html>
