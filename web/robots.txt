@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /thanks.html
+Disallow: /api/
+
+Sitemap: https://omnimount.es/sitemap.xml
