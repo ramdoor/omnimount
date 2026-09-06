@@ -10,6 +10,9 @@ final class MountController: ObservableObject {
 
     @Published var busyPartitions: Set<String> = []
     @Published var lastMessage: String?
+    /// Partición cuyo montaje falló por cuotas ext4 internas: la UI ofrece
+    /// desactivarlas con un clic (vía helper).
+    @Published var quotaFixTarget: DiskPartition?
 
     /// Helper privilegiado (SMAppService): si está activo, monta sin pedir
     /// contraseña. Si no, se recurre a osascript como plan B.
@@ -105,6 +108,11 @@ final class MountController: ObservableObject {
                 }
             } else {
                 self.lastMessage = message
+                // El mensaje de MountError.ext4QuotaUnsupported cita tune2fs en
+                // ambos idiomas: es el marcador de "arreglable con un clic".
+                if verb == "mount", message.contains("tune2fs") {
+                    self.quotaFixTarget = partition
+                }
             }
             completion()
         }
@@ -112,6 +120,30 @@ final class MountController: ObservableObject {
             helper.mount(deviceIdentifier: partition.deviceIdentifier, completion: handle)
         } else {
             helper.unmount(target: partition.deviceIdentifier, completion: handle)
+        }
+    }
+
+    /// Desactiva las cuotas ext4 de la partición (helper) y reintenta el montaje.
+    func fixQuotaAndMount(_ partition: DiskPartition, completion: @escaping () -> Void) {
+        quotaFixTarget = nil
+        guard helper.state == .enabled else {
+            lastMessage = L10n.t(
+                "Para el arreglo con un clic activa el helper; o ejecuta: sudo omnimount mount \(partition.deviceIdentifier) --fix-quota",
+                "One-click fix needs the helper enabled; or run: sudo omnimount mount \(partition.deviceIdentifier) --fix-quota")
+            completion()
+            return
+        }
+        busyPartitions.insert(partition.deviceIdentifier)
+        helper.fixQuota(deviceIdentifier: partition.deviceIdentifier) { [weak self] ok, message in
+            guard let self else { return }
+            self.busyPartitions.remove(partition.deviceIdentifier)
+            if ok {
+                self.lastMessage = nil
+                self.mount(partition, completion: completion)
+            } else {
+                self.lastMessage = message
+                completion()
+            }
         }
     }
 

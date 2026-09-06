@@ -45,10 +45,15 @@ public struct DetectionResult: Sendable {
     public let filesystem: DetectedFilesystem
     /// Etiqueta de volumen leída del superbloque (solo ext*).
     public let label: String?
+    /// true si el superbloque ext* tiene cuotas internas (RO_COMPAT_QUOTA o
+    /// RO_COMPAT_PROJECT) — fuse2fs no puede montar con ellas activadas.
+    public let extQuotaEnabled: Bool
 
-    public init(filesystem: DetectedFilesystem, label: String? = nil) {
+    public init(filesystem: DetectedFilesystem, label: String? = nil,
+                extQuotaEnabled: Bool = false) {
         self.filesystem = filesystem
         self.label = label
+        self.extQuotaEnabled = extQuotaEnabled
     }
 }
 
@@ -177,6 +182,10 @@ public enum FilesystemDetector {
             }
         }
 
-        return DetectionResult(filesystem: filesystem, label: label)
+        // Cuotas internas: RO_COMPAT_QUOTA (0x0100) | RO_COMPAT_PROJECT (0x2000).
+        // Habituales en discos de NAS (Synology/QNAP); fuse2fs las rechaza.
+        let quota = roCompat & 0x2100 != 0
+
+        return DetectionResult(filesystem: filesystem, label: label, extQuotaEnabled: quota)
     }
 }

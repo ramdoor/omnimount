@@ -128,6 +128,13 @@ final class HelperClient: ObservableObject {
         }, completion: completion)
     }
 
+    /// Desactiva las cuotas ext4 internas de una partición (tune2fs + e2fsck).
+    func fixQuota(deviceIdentifier: String, completion: @escaping (Bool, String) -> Void) {
+        withHelper(timeout: 300, { proxy, finish in
+            proxy.fixQuota(deviceIdentifier: deviceIdentifier, reply: finish)
+        }, completion: completion)
+    }
+
     /// Autotest de Acceso total al disco del helper.
     /// completion(alcanzable, tieneFDA)
     func checkFullDiskAccess(completion: @escaping (Bool, Bool) -> Void) {

@@ -6,6 +6,7 @@ public enum ExternalTool: String, CaseIterable, Sendable {
     case fuse2fs
     case ntfs3g = "ntfs-3g"
     case e2fsck
+    case tune2fs
     case ntfsfix
     case omnimountCLI = "omnimount"
     case mkfsExt2 = "mkfs.ext2"

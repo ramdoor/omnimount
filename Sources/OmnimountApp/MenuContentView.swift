@@ -40,6 +40,25 @@ struct MenuContentView: View {
                 }
             }
 
+            if let target = mountController.quotaFixTarget {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L10n.t(
+                        "\(target.deviceIdentifier) usa cuotas internas de ext4 (típico de discos de NAS). fuse2fs no puede montarlas, pero se pueden desactivar sin borrar datos. Si el disco vuelve a un NAS, este recalculará sus cuotas.",
+                        "\(target.deviceIdentifier) uses ext4 internal quotas (typical of NAS disks). fuse2fs cannot mount them, but they can be disabled without touching your data. If the disk goes back into a NAS, it will rebuild its quotas."))
+                        .font(.caption)
+                    HStack {
+                        Button(L10n.t("Desactivar cuotas y montar", "Disable quotas and mount")) {
+                            mountController.fixQuotaAndMount(target) { monitor.refresh() }
+                        }
+                        .controlSize(.small)
+                        Button(L10n.t("Cancelar", "Cancel")) { mountController.quotaFixTarget = nil }
+                            .controlSize(.small)
+                    }
+                }
+                .padding(8)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+            }
+
             if let message = mountController.lastMessage ?? monitor.lastError {
                 Text(message)
                     .font(.caption)

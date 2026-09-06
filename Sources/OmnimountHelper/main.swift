@@ -71,6 +71,22 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
         }
     }
 
+    func fixQuota(deviceIdentifier: String,
+                  reply: @escaping (Bool, String) -> Void) {
+        do {
+            let part = try partition(for: deviceIdentifier)
+            let detection = try FilesystemDetector.detect(devicePath: part.devicePath)
+            guard detection.extQuotaEnabled else {
+                reply(true, L10n.t("La partición no tiene cuotas activadas.", "The partition has no quotas enabled."))
+                return
+            }
+            try Mounter.disableExtQuota(devicePath: part.devicePath)
+            reply(true, "")
+        } catch {
+            reply(false, Self.friendlyMessage(error))
+        }
+    }
+
     func format(deviceIdentifier: String, filesystem: String, label: String,
                 reply: @escaping (Bool, String) -> Void) {
         guard let target = TargetFormat(rawValue: filesystem) else {

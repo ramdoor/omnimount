@@ -8,6 +8,7 @@ public enum MountError: Error, LocalizedError {
     case mountFailed(tool: String, stderr: String)
     case unmountFailed(String)
     case fsckFailed(String)
+    case ext4QuotaUnsupported(String)
 
     public var errorDescription: String? {
         switch self {
@@ -25,6 +26,10 @@ public enum MountError: Error, LocalizedError {
             return L10n.t("No se pudo desmontar: \(message)", "Could not unmount: \(message)")
         case .fsckFailed(let message):
             return L10n.t("La verificación (fsck) encontró problemas: \(message)", "Verification (fsck) found problems: \(message)")
+        case .ext4QuotaUnsupported(let device):
+            return L10n.t(
+                "Este disco usa cuotas internas de ext4 (habitual en discos de NAS), que fuse2fs no soporta. Desactívalas (no borra datos) con: sudo omnimount mount \(device) --fix-quota — o con tune2fs -O ^quota,^project_quota.",
+                "This disk uses ext4 internal quotas (common on NAS disks), which fuse2fs does not support. Disable them (no data loss) with: sudo omnimount mount \(device) --fix-quota — or with tune2fs -O ^quota,^project_quota.")
         }
     }
 }
@@ -64,6 +69,12 @@ public enum Mounter {
         guard isRoot else { throw MountError.notRoot }
         guard ToolLocator.isFuseTInstalled || ToolLocator.isMacFUSEInstalled else {
             throw MountError.macFUSEMissing
+        }
+
+        // fuse2fs rechaza superbloques con cuotas internas ("quotas not
+        // supported"); detectarlo aquí da un error accionable en vez del críptico.
+        if detection.filesystem != .ntfs, detection.extQuotaEnabled {
+            throw MountError.ext4QuotaUnsupported(partition.deviceIdentifier)
         }
 
         let tool: ExternalTool
@@ -229,6 +240,27 @@ public enum Mounter {
             return result.stdout
         default:
             throw MountError.unsupportedFilesystem(filesystem)
+        }
+    }
+
+    /// Desactiva las cuotas internas del superbloque ext* (tune2fs) y pasa
+    /// e2fsck. No borra datos; un NAS que las usara tendrá que recalcularlas.
+    public static func disableExtQuota(devicePath: String) throws {
+        guard isRoot else { throw MountError.notRoot }
+        guard let tune2fs = ToolLocator.find(.tune2fs) else {
+            throw MountError.toolMissing(.tune2fs)
+        }
+        let result = try ShellRunner.run(tune2fs, ["-O", "^quota,^project_quota", devicePath])
+        guard result.succeeded else {
+            throw MountError.mountFailed(tool: "tune2fs", stderr: result.stderr)
+        }
+        if let e2fsck = ToolLocator.find(.e2fsck) {
+            // -f fuerza la pasada completa; -y acepta las reparaciones triviales
+            // que deja la retirada de los inodos de cuota. Códigos 0 y 1 son OK.
+            let check = try ShellRunner.run(e2fsck, ["-fy", devicePath])
+            if check.exitCode > 1 {
+                throw MountError.fsckFailed(check.stderr.isEmpty ? check.stdout : check.stderr)
+            }
         }
     }
 }

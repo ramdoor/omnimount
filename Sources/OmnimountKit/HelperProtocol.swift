@@ -9,7 +9,7 @@ public enum HelperConstants {
     public static let plistName = "org.omnimount.helper.plist"
     /// Versión del protocolo; la app la comprueba al conectar para detectar
     /// helpers antiguos tras una actualización.
-    public static let protocolVersion = "1"
+    public static let protocolVersion = "2"
 }
 
 /// Operaciones privilegiadas que el daemon expone por XPC.
@@ -37,6 +37,11 @@ public enum HelperConstants {
     /// filesystem: rawValue de TargetFormat (ext4, ntfs, fat32, exfat…).
     func format(deviceIdentifier: String, filesystem: String, label: String,
                 reply: @escaping (Bool, String) -> Void)
+
+    /// Desactiva las cuotas internas ext4 de una partición (tune2fs) para que
+    /// fuse2fs pueda montarla. La app debe haber confirmado con el usuario.
+    func fixQuota(deviceIdentifier: String,
+                  reply: @escaping (Bool, String) -> Void)
 
     /// Autotest: ¿tiene el helper Acceso total al disco (TCC)?
     /// Sin él, todas las operaciones de disco fallarán con EPERM.
