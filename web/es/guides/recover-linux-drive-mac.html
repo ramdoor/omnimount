@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recuperar ficheros de un disco Linux antiguo con tu Mac</title>
+<meta name="description" content="Un portátil o servidor muerto, el disco en una carcasa USB y un Mac. Cómo montar la partición ext4, qué significan LVM y btrfs para tus opciones, y cómo copiar con seguridad.">
+<link rel="canonical" href="https://omnimount.es/es/guides/recover-linux-drive-mac.html">
+<link rel="alternate" hreflang="en" href="https://omnimount.es/guides/recover-linux-drive-mac.html">
+<link rel="alternate" hreflang="es" href="https://omnimount.es/es/guides/recover-linux-drive-mac.html">
+<link rel="alternate" hreflang="x-default" href="https://omnimount.es/guides/recover-linux-drive-mac.html">
+<link rel="stylesheet" href="/legal-style.css">
+<style>
+  pre{background:var(--surface);border:1px solid var(--line);border-radius:9px;
+    padding:14px 16px;overflow-x:auto;margin:12px 0;font-family:var(--mono);
+    font-size:.85rem;color:var(--ink);line-height:1.5}
+  code{font-family:var(--mono);font-size:.9em;background:var(--surface);
+    border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+  pre code{border:none;background:none;padding:0}
+  .cta{background:rgba(53,196,111,.08);border:1px solid rgba(53,196,111,.35);
+    border-radius:12px;padding:20px 22px;margin:36px 0}
+  .cta p{margin-bottom:10px}
+  .cta a.btn{display:inline-block;background:var(--mount);color:#0a1410;font-weight:700;
+    border-radius:9px;padding:10px 20px;text-decoration:none;margin-right:10px}
+  .cta a.gh{color:var(--muted)}
+  .meta{font-family:var(--mono);font-size:.78rem;color:var(--muted);margin-bottom:28px}
+</style>
+<script defer data-domain="omnimount.es" src="https://plausible.alfeonrobotics.com/js/script.js"></script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "Article", "headline": "Recuperar ficheros de un disco Linux antiguo con tu Mac", "inLanguage": "es", "datePublished": "2026-09-07", "author": {"@type": "Organization", "name": "Omnimount"}, "publisher": {"@type": "Organization", "name": "Omnimount", "url": "https://omnimount.es/"}, "mainEntityOfPage": "https://omnimount.es/es/guides/recover-linux-drive-mac.html"}</script>
+</head>
+<body>
+<header><div class="wrap"><a href="/es/">Omnimount</a><span>· Guías</span>
+<span style="margin-left:auto"><a href="https://omnimount.es/guides/recover-linux-drive-mac.html">EN</a></span></div></header>
+<div class="wrap">
+<h1>Recuperar ficheros de un disco Linux antiguo con tu Mac</h1>
+<p class="meta">Actualizado septiembre 2026 · portátiles muertos, servidores jubilados, discos externos viejos</p>
+
+<p>Hay un momento muy concreto en el que esta guía importa: una máquina vieja no arranca,
+los ficheros solo existen en su disco, y el único ordenador que funciona en casa es un Mac.
+Buena noticia — para los montajes Linux más comunes, con el Mac basta.</p>
+
+<h2>Paso 1: conecta el disco</h2>
+<p>Saca el disco y ponlo en una carcasa o dock USB (las carcasas SATA de 2,5" cuestan ~15 €;
+los discos de 3,5" necesitan dock con alimentación; NVMe necesita carcasa NVMe). Conéctalo e
+ignora el aviso de macOS de "disco no legible" — es lo esperado; no inicialices nada.</p>
+
+<h2>Paso 2: identifica qué tienes delante</h2>
+<p>Un disco Linux típico tiene una partición de arranque pequeña (FAT — macOS la lee, no hay
+nada útil dentro) y una partición grande de sistema o home. Lo que contenga esa partición
+grande lo decide todo:</p>
+<ul>
+<li><b>ext4 normal</b> — Ubuntu de escritorio, Mint, Debian, Raspberry Pi OS: monta
+directamente. Es la mayoría de las máquinas domésticas.</li>
+<li><b>LVM</b> (Ubuntu Server por defecto, Fedora antigua) — una capa contenedora que macOS
+no puede abrir; necesitarás una VM Linux para activarla.</li>
+<li><b>btrfs</b> (Fedora 33+, openSUSE) — otro sistema de archivos; las herramientas ext4 no aplican.</li>
+<li><b>Cifrado LUKS</b> — nada lo lee sin la contraseña y un entorno Linux.</li>
+</ul>
+<p>El detector de Omnimount te dice en qué caso estás nada más conectar el disco.</p>
+
+<h2>Paso 3: monta en solo lectura y copia</h2>
+<p>Para el caso ext4: monta en <b>solo lectura</b> (estás rescatando, no editando), abre el
+volumen en el Finder y copia lo que importe. Los directorios personales viven en
+<code>/home/tunombre</code>. Como el montaje corre con privilegios verás los ficheros de
+todos los usuarios, con independencia de sus permisos de Linux.</p>
+
+<h2>Si el propio disco se está muriendo</h2>
+<p>Clics, desconexiones, ficheros que se atascan al 90%: deja de copiar fichero a fichero.
+<a href="clone-sd-card-mac.html">Clona el disco entero a una imagen</a> primero — una pasada
+secuencial es lo más suave que puedes hacerle a un disco moribundo — y rescata después desde
+la imagen. Si el journal quedó sucio (la máquina murió escribiendo), pasa una comprobación
+antes de fiarte de lo que copies.</p>
+<div class="cta">
+<p><b style="color:var(--ink)">Olvídate del terminal.</b> Omnimount monta, comprueba y clona discos ext4
+y NTFS desde la barra de menú — sin extensiones del kernel, sin Recovery, sin contraseñas. Detecta los
+discos de NAS con cuotas y los arregla con un clic.</p>
+<a class="btn" href="/es/">Consigue Omnimount — 9,99 €</a>
+<a class="gh" href="https://github.com/ramdoor/omnimount">o compílalo gratis (GPL)</a>
+</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Read a NAS hard drive on your Mac (OMV, Synology, QNAP)</title>
+<meta name="description" content="Pulled a hard drive from a NAS and your Mac can't read it? What's actually on OMV, Synology and QNAP disks, which ones mount directly, and how to handle ext4 quotas.">
+<link rel="canonical" href="https://omnimount.es/guides/read-nas-drive-mac.html">
+<link rel="alternate" hreflang="en" href="https://omnimount.es/guides/read-nas-drive-mac.html">
+<link rel="alternate" hreflang="es" href="https://omnimount.es/es/guides/read-nas-drive-mac.html">
+<link rel="alternate" hreflang="x-default" href="https://omnimount.es/guides/read-nas-drive-mac.html">
+<link rel="stylesheet" href="/legal-style.css">
+<style>
+  pre{background:var(--surface);border:1px solid var(--line);border-radius:9px;
+    padding:14px 16px;overflow-x:auto;margin:12px 0;font-family:var(--mono);
+    font-size:.85rem;color:var(--ink);line-height:1.5}
+  code{font-family:var(--mono);font-size:.9em;background:var(--surface);
+    border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+  pre code{border:none;background:none;padding:0}
+  .cta{background:rgba(53,196,111,.08);border:1px solid rgba(53,196,111,.35);
+    border-radius:12px;padding:20px 22px;margin:36px 0}
+  .cta p{margin-bottom:10px}
+  .cta a.btn{display:inline-block;background:var(--mount);color:#0a1410;font-weight:700;
+    border-radius:9px;padding:10px 20px;text-decoration:none;margin-right:10px}
+  .cta a.gh{color:var(--muted)}
+  .meta{font-family:var(--mono);font-size:.78rem;color:var(--muted);margin-bottom:28px}
+</style>
+<script defer data-domain="omnimount.es" src="https://plausible.alfeonrobotics.com/js/script.js"></script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "Article", "headline": "Read a NAS hard drive on your Mac (OMV, Synology, QNAP)", "inLanguage": "en", "datePublished": "2026-09-07", "author": {"@type": "Organization", "name": "Omnimount"}, "publisher": {"@type": "Organization", "name": "Omnimount", "url": "https://omnimount.es/"}, "mainEntityOfPage": "https://omnimount.es/guides/read-nas-drive-mac.html"}</script>
+</head>
+<body>
+<header><div class="wrap"><a href="/">Omnimount</a><span>· Guides</span>
+<span style="margin-left:auto"><a href="https://omnimount.es/es/guides/read-nas-drive-mac.html">ES</a></span></div></header>
+<div class="wrap">
+<h1>Read a NAS hard drive on your Mac</h1>
+<p class="meta">Updated September 2026 · OpenMediaVault, Synology, QNAP, generic Linux servers</p>
+
+<p>The NAS died, or you're migrating away from it, and now you have a bare hard drive and a
+USB dock. Whether your Mac can read it depends entirely on which NAS wrote it — so before
+fighting the disk, check which case you're in.</p>
+
+<h2>OpenMediaVault and generic Linux servers: yes, directly</h2>
+<p>OMV and most hand-built Debian/Ubuntu servers format data drives as a <b>plain ext4
+partition</b>. macOS can't read ext4 natively, but with an ext4 driver the disk mounts like
+any other volume — read and write. One NAS-specific catch: these systems often enable
+<b>ext4 internal quotas</b>, which the open source driver (fuse2fs) refuses to mount.
+The error looks like <code>quotas not supported</code>. Omnimount detects this and offers a
+one-click fix — it disables the quota feature without touching a single file (your NAS,
+if the disk ever goes back, simply rebuilds its quota accounting). This exact case — an OMV
+data drive — is verified working end to end.</p>
+
+<h2>Synology: not directly — here's why</h2>
+<p>Synology wraps <i>every</i> volume, even single-disk ones, in Linux software RAID
+(mdadm), and SHR adds LVM on top. The filesystem (ext4 or btrfs) lives <i>inside</i> those
+layers, so no macOS driver can see it at the partition level — this is a Synology design
+decision, not a driver limitation. Your realistic options: connect the drive to a Linux
+machine or VM and assemble the array (<code>mdadm --assemble --scan</code>), or use
+Synology's own recovery guide. If the volume was btrfs, ext4 tools won't help at all.
+What a Mac <i>can</i> still do: <a href="clone-sd-card-mac.html">clone the whole disk to an
+image</a> first, so you work on a copy instead of the only original.</p>
+
+<h2>QNAP: same story, different layers</h2>
+<p>QNAP uses LVM over mdadm. Same verdict as Synology: assemble on Linux, or clone from
+the Mac and work on the image.</p>
+
+<h2>Checklist for the direct case (OMV / plain ext4)</h2>
+<ul>
+<li>Connect the drive with a powered dock (3.5" drives need external power).</li>
+<li>Mount read-only first if you only need to rescue files.</li>
+<li>Got the quota error? Use the one-click fix, or:
+<code>sudo omnimount mount diskXsY --fix-quota</code></li>
+<li>If the NAS died mid-write, run a filesystem check before writing anything.</li>
+<li>Copying years of family photos off a 10-year-old drive? Clone it first —
+old disks like to die during their first full read.</li>
+</ul>
+<div class="cta">
+<p><b style="color:var(--ink)">Skip the terminal.</b> Omnimount mounts, checks and clones ext4 and NTFS
+drives from the menu bar — no kernel extensions, no Recovery Mode, no password prompts. It detects
+NAS quota disks and fixes them in one click.</p>
+<a class="btn" href="/">Get Omnimount — €9.99</a>
+<a class="gh" href="https://github.com/ramdoor/omnimount">or build it free (GPL)</a>
+</div>
+</div>
+</body>
+</html>

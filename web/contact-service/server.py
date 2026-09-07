@@ -146,6 +146,8 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        if self.path == "/api/review":
+            return self._review()
         if self.path != "/api/contact":
             return self._reply(404, {"ok": False})
         ip = self.headers.get("X-Real-IP", self.client_address[0])
@@ -177,6 +179,52 @@ class Handler(BaseHTTPRequestHandler):
         forward_async(entry)
         return self._reply(200, {"ok": True})
 
+
+REVIEWS = Path("/var/lib/omnimount-contact/reviews.jsonl")
+REVIEW_LEN = {"product": 40, "rating": 1, "name": 120, "email": 320, "comment": 3000}
+
+
+def _review(self):
+    ip = self.headers.get("X-Real-IP", self.client_address[0])
+    if rate_limited("rv:" + ip, limit=5):
+        return self._reply(429, {"ok": False, "error": "rate"})
+    try:
+        length = min(int(self.headers.get("Content-Length", 0)), 32768)
+        data = json.loads(self.rfile.read(length))
+    except Exception:
+        return self._reply(400, {"ok": False, "error": "json"})
+    if data.get("web"):  # honeypot
+        return self._reply(200, {"ok": True})
+
+    entry = {}
+    for field in ("product", "name", "email", "comment"):
+        entry[field] = str(data.get(field, "")).strip()[:REVIEW_LEN.get(field, 200)]
+    if entry["product"] not in ("omnimount", "superfinder"):
+        return self._reply(400, {"ok": False, "error": "product"})
+    try:
+        rating = int(data.get("rating", 0))
+    except Exception:
+        rating = 0
+    if not 1 <= rating <= 5:
+        return self._reply(400, {"ok": False, "error": "rating"})
+    entry["rating"] = rating
+    if not entry["comment"]:
+        return self._reply(400, {"ok": False, "error": "comment"})
+
+    entry["ts"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    entry["ip"] = ip
+    REVIEWS.parent.mkdir(parents=True, exist_ok=True)
+    with REVIEWS.open("a") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    forward_async({
+        "name": f"Reseña {entry['product']} · {rating}★ · {entry['name'] or 'anónimo'}",
+        "email": entry["email"] or "noreply@omnimount.es",
+        "message": entry["comment"],
+    })
+    return self._reply(200, {"ok": True})
+
+
+Handler._review = _review
 
 if __name__ == "__main__":
     ThreadingHTTPServer(("127.0.0.1", 8090), Handler).serve_forever()
