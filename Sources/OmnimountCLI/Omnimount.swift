@@ -7,7 +7,7 @@ struct Omnimount: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "omnimount",
         abstract: "Acceso de lectura/escritura a ext2/3/4 y NTFS en macOS, envolviendo fuse2fs y ntfs-3g.",
-        version: "0.1.5",
+        version: "0.1.6",
         subcommands: [
             List.self, Detect.self, Mount.self, Unmount.self,
             Test.self, Clone.self, Restore.self, Doctor.self,

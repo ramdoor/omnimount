@@ -28,8 +28,8 @@ public enum MountError: Error, LocalizedError {
             return L10n.t("La verificación (fsck) encontró problemas: \(message)", "Verification (fsck) found problems: \(message)")
         case .ext4QuotaUnsupported(let device):
             return L10n.t(
-                "Este disco usa cuotas internas de ext4 (habitual en discos de NAS), que fuse2fs no soporta. Desactívalas (no borra datos) con: sudo omnimount mount \(device) --fix-quota — o con tune2fs -O ^quota,^project_quota.",
-                "This disk uses ext4 internal quotas (common on NAS disks), which fuse2fs does not support. Disable them (no data loss) with: sudo omnimount mount \(device) --fix-quota — or with tune2fs -O ^quota,^project_quota.")
+                "Este disco usa cuotas internas de ext4 (habitual en discos de NAS), que fuse2fs no soporta. Desactívalas (no borra datos) con: sudo omnimount mount \(device) --fix-quota — o con tune2fs -O ^quota,^project.",
+                "This disk uses ext4 internal quotas (common on NAS disks), which fuse2fs does not support. Disable them (no data loss) with: sudo omnimount mount \(device) --fix-quota — or with tune2fs -O ^quota,^project.")
         }
     }
 }
@@ -250,7 +250,7 @@ public enum Mounter {
         guard let tune2fs = ToolLocator.find(.tune2fs) else {
             throw MountError.toolMissing(.tune2fs)
         }
-        let result = try ShellRunner.run(tune2fs, ["-O", "^quota,^project_quota", devicePath])
+        let result = try ShellRunner.run(tune2fs, ["-O", "^quota,^project", devicePath])
         guard result.succeeded else {
             throw MountError.mountFailed(tool: "tune2fs", stderr: result.stderr)
         }
