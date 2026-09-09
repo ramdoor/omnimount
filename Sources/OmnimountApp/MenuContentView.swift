@@ -66,6 +66,21 @@ struct MenuContentView: View {
                     .lineLimit(4)
             }
 
+            if let label = mountController.cloneLabel {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(label).font(.caption)
+                    if let value = mountController.cloneProgress {
+                        ProgressView(value: value)
+                        Text(String(format: "%.0f %%", value * 100))
+                            .font(.caption2).foregroundStyle(.secondary)
+                    } else {
+                        ProgressView()
+                    }
+                }
+                .padding(6)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+            }
+
             if let summary = mountController.lastFormatSummary {
                 Label(summary, systemImage: "checkmark.circle")
                     .font(.caption)
@@ -170,12 +185,35 @@ struct MenuContentView: View {
 private struct DiskSection: View {
     let disk: ExternalDisk
     @EnvironmentObject private var monitor: DiskMonitor
+    @EnvironmentObject private var mountController: MountController
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("\(disk.mediaName ?? disk.deviceIdentifier) · \(disk.humanSize)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack {
+                Text("\(disk.mediaName ?? disk.deviceIdentifier) · \(disk.humanSize)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Menu {
+                    Button(L10n.t("Clonar disco a imagen…", "Clone disk to image…")) {
+                        mountController.cloneToImage(
+                            identifier: disk.deviceIdentifier,
+                            suggestedName: disk.mediaName ?? disk.deviceIdentifier,
+                            totalBytes: disk.size) { monitor.refresh() }
+                    }
+                    Button(L10n.t("Restaurar imagen en el disco…", "Restore image onto disk…"), role: .destructive) {
+                        mountController.restoreImage(
+                            identifier: disk.deviceIdentifier,
+                            displayName: disk.mediaName ?? disk.deviceIdentifier) { monitor.refresh() }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .frame(width: 24)
+                .disabled(mountController.cloneLabel != nil)
+                .help(L10n.t("Clonar / restaurar el disco entero", "Clone / restore the whole disk"))
+            }
             ForEach(disk.partitions) { partition in
                 PartitionRow(partition: partition)
             }
@@ -226,6 +264,12 @@ private struct PartitionRow: View {
             }
 
             Menu {
+                Button(L10n.t("Clonar partición a imagen…", "Clone partition to image…")) {
+                    mountController.cloneToImage(
+                        identifier: partition.deviceIdentifier,
+                        suggestedName: partition.volumeName ?? partition.deviceIdentifier,
+                        totalBytes: partition.size) { monitor.refresh() }
+                }
                 Button(L10n.t("Formatear…", "Format…"), role: .destructive) {
                     mountController.formatTarget = partition
                 }

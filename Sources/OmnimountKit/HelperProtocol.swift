@@ -9,7 +9,7 @@ public enum HelperConstants {
     public static let plistName = "org.omnimount.helper.plist"
     /// Versión del protocolo; la app la comprueba al conectar para detectar
     /// helpers antiguos tras una actualización.
-    public static let protocolVersion = "2"
+    public static let protocolVersion = "3"
 }
 
 /// Operaciones privilegiadas que el daemon expone por XPC.
@@ -42,6 +42,16 @@ public enum HelperConstants {
     /// fuse2fs pueda montarla. La app debe haber confirmado con el usuario.
     func fixQuota(deviceIdentifier: String,
                   reply: @escaping (Bool, String) -> Void)
+
+    /// Clona un disco entero o una partición a una imagen .img. La operación
+    /// puede durar horas; la app muestra progreso sondeando el tamaño del .img.
+    func clone(deviceIdentifier: String, imagePath: String,
+               reply: @escaping (Bool, String) -> Void)
+
+    /// Restaura una imagen sobre un disco/partición. DESTRUCTIVO — la app debe
+    /// haber confirmado explícitamente con el usuario antes de llamar.
+    func restore(imagePath: String, deviceIdentifier: String,
+                 reply: @escaping (Bool, String) -> Void)
 
     /// Autotest: ¿tiene el helper Acceso total al disco (TCC)?
     /// Sin él, todas las operaciones de disco fallarán con EPERM.

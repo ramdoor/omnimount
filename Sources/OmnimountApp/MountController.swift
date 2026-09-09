@@ -63,6 +63,76 @@ final class MountController: ObservableObject {
         }
     }
 
+    /// Operación de clonado/restauración en curso (nil = ninguna).
+    @Published var cloneLabel: String?
+    /// Progreso 0…1 del clonado (nil con cloneLabel activo = indeterminado).
+    @Published var cloneProgress: Double?
+    private var cloneTimer: Timer?
+
+    /// Clona un disco o partición a un .img elegido con NSSavePanel.
+    func cloneToImage(identifier: String, suggestedName: String, totalBytes: Int64,
+                      completion: @escaping () -> Void) {
+        guard helper.state == .enabled else {
+            lastMessage = L10n.t("Clonar desde la app requiere el helper activo. Alternativa: sudo omnimount clone \(identifier) imagen.img", "Cloning from the app requires the helper. Alternative: sudo omnimount clone \(identifier) image.img")
+            completion(); return
+        }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = suggestedName + ".img"
+        panel.title = L10n.t("Guardar imagen del disco", "Save disk image")
+        panel.canCreateDirectories = true
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { completion(); return }
+
+        cloneLabel = L10n.t("Clonando \(identifier) → \(url.lastPathComponent)…", "Cloning \(identifier) → \(url.lastPathComponent)…")
+        cloneProgress = 0
+        let path = url.path
+        cloneTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            guard let self, totalBytes > 0 else { return }
+            let written = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int64 ?? 0
+            Task { @MainActor in self.cloneProgress = min(1, Double(written) / Double(totalBytes)) }
+        }
+        helper.clone(deviceIdentifier: identifier, imagePath: path) { [weak self] ok, message in
+            guard let self else { return }
+            self.cloneTimer?.invalidate(); self.cloneTimer = nil
+            self.cloneLabel = nil; self.cloneProgress = nil
+            self.lastFormatSummary = ok ? L10n.t("Imagen guardada en \(message)", "Image saved to \(message)") : nil
+            self.lastMessage = ok ? nil : message
+            completion()
+        }
+    }
+
+    /// Restaura un .img sobre un disco o partición, con confirmación destructiva.
+    func restoreImage(identifier: String, displayName: String, completion: @escaping () -> Void) {
+        guard helper.state == .enabled else {
+            lastMessage = L10n.t("Restaurar desde la app requiere el helper activo. Alternativa: sudo omnimount restore imagen.img \(identifier)", "Restoring from the app requires the helper. Alternative: sudo omnimount restore image.img \(identifier)")
+            completion(); return
+        }
+        let panel = NSOpenPanel()
+        panel.title = L10n.t("Elegir imagen a restaurar", "Choose image to restore")
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { completion(); return }
+
+        let alert = NSAlert()
+        alert.messageText = L10n.t("¿Restaurar sobre \(displayName)?", "Restore over \(displayName)?")
+        alert.informativeText = L10n.t("Se sobrescribirá TODO el contenido de \(identifier) con \(url.lastPathComponent). Esta operación no se puede deshacer.", "ALL contents of \(identifier) will be overwritten with \(url.lastPathComponent). This cannot be undone.")
+        alert.alertStyle = .critical
+        alert.addButton(withTitle: L10n.t("Restaurar", "Restore"))
+        alert.addButton(withTitle: L10n.t("Cancelar", "Cancel"))
+        guard alert.runModal() == .alertFirstButtonReturn else { completion(); return }
+
+        cloneLabel = L10n.t("Restaurando \(url.lastPathComponent) → \(identifier)…", "Restoring \(url.lastPathComponent) → \(identifier)…")
+        cloneProgress = nil
+        helper.restore(imagePath: url.path, deviceIdentifier: identifier) { [weak self] ok, message in
+            guard let self else { return }
+            self.cloneLabel = nil
+            self.lastFormatSummary = ok ? L10n.t("Imagen restaurada en \(message)", "Image restored to \(message)") : nil
+            self.lastMessage = ok ? nil : message
+            completion()
+        }
+    }
+
     /// Partición para la que la interfaz está mostrando el diálogo de formateo.
     @Published var formatTarget: DiskPartition?
     @Published var lastFormatSummary: String?

@@ -71,6 +71,34 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
         }
     }
 
+    func clone(deviceIdentifier: String, imagePath: String,
+               reply: @escaping (Bool, String) -> Void) {
+        do {
+            try Cloner.clone(wholeDisk: deviceIdentifier, to: imagePath, progress: { _ in })
+            // El helper corre como root: devolver la imagen al dueño del
+            // directorio destino para que el usuario pueda usarla/borrarla.
+            let dir = (imagePath as NSString).deletingLastPathComponent
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: dir),
+               let uid = (attrs[.ownerAccountID] as? NSNumber)?.uint32Value,
+               let gid = (attrs[.groupOwnerAccountID] as? NSNumber)?.uint32Value {
+                chown(imagePath, uid, gid)
+            }
+            reply(true, imagePath)
+        } catch {
+            reply(false, Self.friendlyMessage(error))
+        }
+    }
+
+    func restore(imagePath: String, deviceIdentifier: String,
+                 reply: @escaping (Bool, String) -> Void) {
+        do {
+            try Cloner.restore(imagePath: imagePath, to: deviceIdentifier, progress: { _ in })
+            reply(true, deviceIdentifier)
+        } catch {
+            reply(false, Self.friendlyMessage(error))
+        }
+    }
+
     func fixQuota(deviceIdentifier: String,
                   reply: @escaping (Bool, String) -> Void) {
         do {

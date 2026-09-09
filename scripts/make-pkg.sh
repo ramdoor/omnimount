@@ -13,7 +13,7 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_DIR"
 
-VERSION="0.1.6"
+VERSION="0.1.7"
 APP="$REPO_DIR/dist/Omnimount.app"
 PKG="$REPO_DIR/dist/Omnimount-$VERSION.pkg"
 
