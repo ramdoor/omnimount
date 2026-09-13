@@ -18,6 +18,12 @@ public enum ExternalTool: String, CaseIterable, Sendable {
 
     var candidateDirectories: [String] {
         [
+            // Último recurso absoluto: el bundle instalado. Cubre CLIs viejos
+            // de `make install` en el PATH, apps trasladadas por Gatekeeper y
+            // cualquier proceso cuyo argv[0] no apunte junto a las herramientas
+            // embebidas (reporte real de un cliente: "fuse2fs not found" con
+            // fuse2fs presente en el bundle).
+            "/Applications/Omnimount.app/Contents/MacOS",
             "/opt/homebrew/bin",
             "/opt/homebrew/sbin",
             "/opt/homebrew/opt/e2fsprogs/sbin",

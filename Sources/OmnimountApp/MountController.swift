@@ -224,7 +224,11 @@ final class MountController: ObservableObject {
             return
         }
         busyPartitions.insert(partition.deviceIdentifier)
-        let command = "\(cli) \(verb) \(partition.deviceIdentifier)"
+        // Fijar el directorio de herramientas del bundle: aunque `cli` fuera un
+        // omnimount ajeno del PATH, encontrará el fuse2fs embebido.
+        let toolDir = Bundle.main.bundleURL
+            .appendingPathComponent("Contents/MacOS").path
+        let command = "OMNIMOUNT_TOOL_DIR=\(toolDir) \(cli) \(verb) \(partition.deviceIdentifier)"
         let prompt = self.prompt
 
         Task.detached {
