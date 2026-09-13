@@ -33,14 +33,16 @@ struct SetupView: View {
                 done: fuseLayer != .none,
                 title: fuseLayerTitle,
                 detail: L10n.t("La capa que permite montar sistemas de ficheros en espacio de usuario. FUSE-T no necesita kext ni reinicios.", "The layer that mounts filesystems in user space. FUSE-T needs no kext and no reboots."),
-                actionLabel: L10n.t("Copiar comando de instalación", "Copy install command"),
-                action: { copy("brew install --cask macos-fuse-t/cask/fuse-t") }
+                actionLabel: installingFuseT
+                    ? L10n.t("Instalando…", "Installing…")
+                    : L10n.t("Instalar FUSE-T", "Install FUSE-T"),
+                action: { installFuseT() }
             )
 
             stepRow(
                 done: fuse2fsPath != nil,
                 title: fuse2fsPath.map { "fuse2fs — \($0)" } ?? L10n.t("fuse2fs (montaje ext2/3/4)", "fuse2fs (ext2/3/4 mounting)"),
-                detail: L10n.t("Se compila con `make fuse2fs` desde el repositorio (el paquete de Homebrew no lo incluye).", "Built with `make fuse2fs` from the repository (the Homebrew package does not include it)."),
+                detail: L10n.t("Incluido dentro de la app.", "Bundled inside the app."),
                 actionLabel: L10n.t("Copiar comando", "Copy command"),
                 action: { copy("make fuse2fs") }
             )
@@ -48,17 +50,17 @@ struct SetupView: View {
             stepRow(
                 done: ntfs3gPath != nil,
                 title: ntfs3gPath.map { "ntfs-3g — \($0)" } ?? L10n.t("ntfs-3g (montaje NTFS)", "ntfs-3g (NTFS mounting)"),
-                detail: L10n.t("Montaje NTFS en escritura y mkntfs para formatear.", "Read/write NTFS mounting plus mkntfs for formatting."),
+                detail: L10n.t("Incluido dentro de la app, compilado contra FUSE-T (sin macFUSE).", "Bundled inside the app, built against FUSE-T (no macFUSE needed)."),
                 actionLabel: L10n.t("Copiar comando", "Copy command"),
-                action: { copy("brew install gromgit/fuse/ntfs-3g-mac") }
+                action: { copy("make ntfs3g") }
             )
 
             stepRow(
                 done: e2fsckPath != nil,
                 title: L10n.t("e2fsprogs (verificación y formateo ext4)", "e2fsprogs (ext4 checking and formatting)"),
-                detail: L10n.t("e2fsck, mkfs.ext4 y compañía.", "e2fsck, mkfs.ext4 and friends."),
+                detail: L10n.t("e2fsck, mkfs.ext4 y compañía — incluidos dentro de la app.", "e2fsck, mkfs.ext4 and friends — bundled inside the app."),
                 actionLabel: L10n.t("Copiar comando", "Copy command"),
-                action: { copy("brew install e2fsprogs") }
+                action: { copy("make fuse2fs") }
             )
 
             stepRow(
@@ -168,6 +170,37 @@ struct SetupView: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(command, forType: .string)
         copiedCommand = command
+    }
+
+    @State private var installingFuseT = false
+
+    /// Descarga el pkg oficial de FUSE-T y lo instala con diálogo de admin.
+    private func installFuseT() {
+        guard !installingFuseT else { return }
+        installingFuseT = true
+        let url = URL(string: "https://github.com/macos-fuse-t/fuse-t/releases/download/1.2.7/fuse-t-macos-installer-1.2.7.pkg")!
+        URLSession.shared.downloadTask(with: url) { temp, _, error in
+            guard let temp, error == nil else {
+                DispatchQueue.main.async {
+                    installingFuseT = false
+                    NSWorkspace.shared.open(URL(string: "https://github.com/macos-fuse-t/fuse-t/releases/latest")!)
+                }
+                return
+            }
+            let pkg = FileManager.default.temporaryDirectory.appendingPathComponent("fuse-t-installer.pkg")
+            try? FileManager.default.removeItem(at: pkg)
+            try? FileManager.default.moveItem(at: temp, to: pkg)
+            let script = "do shell script \"installer -pkg '\(pkg.path)' -target /\" with administrator privileges"
+            DispatchQueue.global().async {
+                let apple = NSAppleScript(source: script)
+                var errInfo: NSDictionary?
+                apple?.executeAndReturnError(&errInfo)
+                DispatchQueue.main.async {
+                    installingFuseT = false
+                    refresh()
+                }
+            }
+        }.resume()
     }
 
     private func refresh() {

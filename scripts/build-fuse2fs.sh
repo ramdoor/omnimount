@@ -140,8 +140,13 @@ if [ ! -x "$FUSE2FS" ]; then
     exit 1
 fi
 
+echo "==> Compilando herramientas ext4 estáticas (e2fsck, mke2fs, tune2fs)"
+make -C e2fsck e2fsck >/dev/null
+make -C misc mke2fs tune2fs >/dev/null
+
 mkdir -p "$VENDOR_BIN"
 cp "$FUSE2FS" "$VENDOR_BIN/fuse2fs"
+cp e2fsck/e2fsck misc/mke2fs misc/tune2fs "$VENDOR_BIN/"
 echo ""
 echo "==> fuse2fs ($BACKEND) instalado en $VENDOR_BIN/fuse2fs"
 "$VENDOR_BIN/fuse2fs" --version 2>&1 | head -2 || true

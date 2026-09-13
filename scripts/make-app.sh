@@ -51,8 +51,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key>              <string>Omnimount</string>
     <key>CFBundleDisplayName</key>       <string>Omnimount</string>
     <key>CFBundleIdentifier</key>        <string>org.omnimount.app</string>
-    <key>CFBundleVersion</key>           <string>0.1.8</string>
-    <key>CFBundleShortVersionString</key><string>0.1.8</string>
+    <key>CFBundleVersion</key>           <string>0.2.0</string>
+    <key>CFBundleShortVersionString</key><string>0.2.0</string>
     <key>CFBundleExecutable</key>        <string>Omnimount</string>
     <key>CFBundleIconFile</key>          <string>AppIcon</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>
@@ -76,6 +76,20 @@ if [ -f "$REPO_DIR/vendor/bin/fuse2fs" ]; then
 else
     echo "AVISO: vendor/bin/fuse2fs no existe (ejecuta 'make fuse2fs'); el bundle no incluirá fuse2fs."
 fi
+
+# Resto de herramientas autocontenidas (0.2.0): NTFS compilado contra FUSE-T
+# y utilidades ext4 estáticas. mke2fs se copia también con los nombres
+# mkfs.ext* porque elige el tipo de FS según argv[0].
+for tool in ntfs-3g mkntfs ntfsfix e2fsck mke2fs tune2fs; do
+    if [ -f "$REPO_DIR/vendor/bin/$tool" ]; then
+        cp "$REPO_DIR/vendor/bin/$tool" "$APP/Contents/MacOS/$tool"
+    else
+        echo "AVISO: vendor/bin/$tool no existe (scripts/build-ntfs3g.sh / build-fuse2fs.sh)"
+    fi
+done
+for name in mkfs.ext2 mkfs.ext3 mkfs.ext4; do
+    [ -f "$APP/Contents/MacOS/mke2fs" ] && cp "$APP/Contents/MacOS/mke2fs" "$APP/Contents/MacOS/$name"
+done
 
 # Sparkle: framework embebido + rpath para encontrarlo en el bundle.
 FRAMEWORKS="$APP/Contents/Frameworks"
@@ -114,6 +128,10 @@ codesign --force $RUNTIME_FLAGS --identifier org.omnimount.helper --sign "${SIGN
 codesign --force $RUNTIME_FLAGS --identifier org.omnimount.cli --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/omnimount-cli"
 # fuse2fs carga libfuse-t (otro equipo): necesita library-validation off.
 [ -f "$APP/Contents/MacOS/fuse2fs" ] && codesign --force $RUNTIME_FLAGS --entitlements "$ENTITLEMENTS" --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/fuse2fs"
+[ -f "$APP/Contents/MacOS/ntfs-3g" ] && codesign --force $RUNTIME_FLAGS --entitlements "$ENTITLEMENTS" --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/ntfs-3g"
+for tool in mkntfs ntfsfix e2fsck mke2fs tune2fs mkfs.ext2 mkfs.ext3 mkfs.ext4; do
+    [ -f "$APP/Contents/MacOS/$tool" ] && codesign --force $RUNTIME_FLAGS --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/$tool"
+done
 codesign --force $RUNTIME_FLAGS --sign "${SIGN_ID:--}" "$APP"
 echo ""
 echo "==> Creado $APP"

@@ -167,10 +167,10 @@ struct MenuContentView: View {
                     Label(L10n.t("Falta la capa FUSE (abre Configuración…)", "FUSE layer missing (open Setup…)"), systemImage: "exclamationmark.triangle")
                 }
                 if d.fuse2fs == nil {
-                    Label(L10n.t("Falta fuse2fs (scripts/build-fuse2fs.sh)", "fuse2fs missing (scripts/build-fuse2fs.sh)"), systemImage: "exclamationmark.triangle")
+                    Label(L10n.t("Falta fuse2fs (reinstala la app)", "fuse2fs missing (reinstall the app)"), systemImage: "exclamationmark.triangle")
                 }
                 if d.ntfs3g == nil {
-                    Label(L10n.t("Falta ntfs-3g (brew install gromgit/fuse/ntfs-3g-mac)", "ntfs-3g missing (brew install gromgit/fuse/ntfs-3g-mac)"), systemImage: "exclamationmark.triangle")
+                    Label(L10n.t("Falta ntfs-3g (reinstala la app)", "ntfs-3g missing (reinstall the app)"), systemImage: "exclamationmark.triangle")
                 }
                 if !mountController.isCLIInstalled {
                     Label(L10n.t("Falta el CLI omnimount (make install)", "omnimount CLI missing (make install)"), systemImage: "exclamationmark.triangle")

@@ -36,6 +36,9 @@ install: install-cli app
 	@echo "Recuerda: si el helper estaba activo, reinícialo:"
 	@echo "  sudo launchctl kickstart -k system/org.omnimount.helper"
 
+ntfs3g:
+	./scripts/build-ntfs3g.sh
+
 fuse2fs:
 	./scripts/build-fuse2fs.sh
 	@if [ -f vendor/bin/fuse2fs ]; then install -m 755 vendor/bin/fuse2fs $(PREFIX)/sbin/fuse2fs 2>/dev/null && echo "fuse2fs instalado en $(PREFIX)/sbin/fuse2fs" || true; fi
