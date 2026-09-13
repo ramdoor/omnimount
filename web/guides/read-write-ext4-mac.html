@@ -51,7 +51,8 @@ implementation that works over a local NFS loopback, and <code>fuse2fs</code> is
 official userspace mount tool from e2fsprogs — the same project that maintains ext4 itself.
 Together they give you full read/write without touching your Mac's security. The catch:
 Homebrew's e2fsprogs bottle doesn't include fuse2fs, so you must build it from source
-against the FUSE-T headers, then mount from the terminal as root:</p>
+against the FUSE-T headers (or use a tool that bundles it pre-built), then mount from
+the terminal as root:</p>
 <pre><code>sudo fuse2fs /dev/disk4s2 /tmp/mnt -o rw</code></pre>
 <p>It works well — this is exactly the stack Omnimount automates, with a signed build,
 a menu bar UI and a privileged helper so you never type a password per mount.</p>

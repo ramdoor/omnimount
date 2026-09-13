@@ -7,7 +7,7 @@ struct Omnimount: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "omnimount",
         abstract: "Acceso de lectura/escritura a ext2/3/4 y NTFS en macOS, envolviendo fuse2fs y ntfs-3g.",
-        version: "0.2.0",
+        version: "0.2.1",
         subcommands: [
             List.self, Detect.self, Mount.self, Unmount.self,
             Test.self, Clone.self, Restore.self, Doctor.self,
@@ -219,7 +219,12 @@ struct Unmount: ParsableCommand {
             mountPoint = target
         } else {
             let part = try resolvePartition(target)
-            guard let current = part.mountPoint ?? Mounter.currentMountPoint(devicePath: part.devicePath) else {
+            // Triple fallback: diskutil → tabla de montajes → derivado por
+            // etiqueta (los montajes FUSE-T aparecen como "fuse-t:/X", no
+            // como /dev/diskN, y los dos primeros no los ven).
+            guard let current = part.mountPoint
+                ?? Mounter.currentMountPoint(devicePath: part.devicePath)
+                ?? Mounter.derivedMountPoint(partition: part) else {
                 throw ValidationError("\(part.deviceIdentifier) no está montada.")
             }
             mountPoint = current

@@ -71,22 +71,18 @@ las librerías de macFUSE en `/usr/local/lib`. Elige un backend por sistema
 
 ### 2. Herramientas de sistemas de ficheros
 
-```sh
-# e2fsprogs: aporta e2fsck, mkfs.ext4, etc. (¡pero NO fuse2fs, ver abajo!)
-brew install e2fsprogs
-
-# ntfs-3g: montaje NTFS lectura/escritura + mkntfs (tap gromgit/fuse)
-brew install gromgit/fuse/ntfs-3g-mac
-```
-
-**fuse2fs hay que compilarlo**: el bottle de Homebrew de e2fsprogs no lo
-incluye porque necesita cabeceras FUSE al compilar. Con la capa FUSE ya
-instalada:
+Se compilan desde el código contra tu capa FUSE (Homebrew NO hace falta —
+su e2fsprogs no trae fuse2fs y su ntfs-3g enlaza macFUSE):
 
 ```sh
-make fuse2fs                    # compila contra FUSE-T (por defecto)
-BACKEND=macfuse make fuse2fs    # o contra macFUSE
+make fuse2fs    # fuse2fs + e2fsck, mke2fs y tune2fs estáticos (FUSE-T por defecto)
+make ntfs3g     # ntfs-3g + mkntfs + ntfsfix, compilados contra FUSE-T
+BACKEND=macfuse make fuse2fs    # fuse2fs contra macFUSE
 ```
+
+Todo queda en `vendor/bin/` y `make install` lo embebe en la app. (La
+[versión de pago](https://omnimount.es) lo incluye ya compilado, firmado y
+notarizado.)
 
 ### 3. Omnimount
 

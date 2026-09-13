@@ -69,22 +69,18 @@ system (or reinstall macFUSE to go back to it).
 
 ### 2. Filesystem tools
 
-```sh
-# e2fsprogs: provides e2fsck, mkfs.ext4, etc. (but NOT fuse2fs, see below!)
-brew install e2fsprogs
-
-# ntfs-3g: read/write NTFS mounting + mkntfs (gromgit/fuse tap)
-brew install gromgit/fuse/ntfs-3g-mac
-```
-
-**fuse2fs must be compiled**: the Homebrew bottle of e2fsprogs doesn't
-include it because it needs FUSE headers at build time. With the FUSE layer
-installed:
+Build them from source against your FUSE layer (Homebrew is NOT needed —
+its e2fsprogs bottle lacks fuse2fs and its ntfs-3g links macFUSE):
 
 ```sh
-make fuse2fs                    # builds against FUSE-T (default)
-BACKEND=macfuse make fuse2fs    # or against macFUSE
+make fuse2fs    # fuse2fs + static e2fsck, mke2fs, tune2fs (FUSE-T by default)
+make ntfs3g     # ntfs-3g + mkntfs + ntfsfix, built against FUSE-T
+BACKEND=macfuse make fuse2fs    # fuse2fs against macFUSE instead
 ```
+
+Everything lands in `vendor/bin/` and gets bundled into the app by
+`make install`. (The [paid build](https://omnimount.es) ships all of this
+pre-built, signed and notarized.)
 
 ### 3. Omnimount
 
@@ -186,8 +182,9 @@ use `--scratch-path` outside the repo for that reason.
   (DiskArbitration doesn't publish them into the user session). The volume
   works normally at `/Volumes/<name>`; drag it to Favorites once if you
   want it handy.
-- NTFS over the FUSE-T backend is pending validation (Homebrew's ntfs-3g
-  links against macFUSE's libraries).
+- NTFS over FUSE-T is validated (mount, write, unmount, ntfsfix) using the
+  bundled ntfs-3g built from source — avoid Homebrew's ntfs-3g-mac, which
+  links against macFUSE's libraries.
 - FUSE binaries aren't bundled with the open source build: they must be
   installed. (The [paid build](https://omnimount.es) bundles
   everything.)

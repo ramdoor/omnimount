@@ -178,7 +178,25 @@ struct SetupView: View {
     private func installFuseT() {
         guard !installingFuseT else { return }
         installingFuseT = true
-        let url = URL(string: "https://github.com/macos-fuse-t/fuse-t/releases/download/1.2.7/fuse-t-macos-installer-1.2.7.pkg")!
+        // Resolver la última release en GitHub; si la API falla, caer a una
+        // versión conocida y, en último término, abrir la página de releases.
+        let fallback = URL(string: "https://github.com/macos-fuse-t/fuse-t/releases/download/1.2.7/fuse-t-macos-installer-1.2.7.pkg")!
+        let api = URL(string: "https://api.github.com/repos/macos-fuse-t/fuse-t/releases/latest")!
+        let resolve: (@escaping (URL) -> Void) -> Void = { done in
+            URLSession.shared.dataTask(with: api) { data, _, _ in
+                if let data,
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let assets = json["assets"] as? [[String: Any]],
+                   let pkg = assets.compactMap({ $0["browser_download_url"] as? String })
+                       .first(where: { $0.hasSuffix(".pkg") }),
+                   let url = URL(string: pkg) {
+                    done(url)
+                } else {
+                    done(fallback)
+                }
+            }.resume()
+        }
+        resolve { url in
         URLSession.shared.downloadTask(with: url) { temp, _, error in
             guard let temp, error == nil else {
                 DispatchQueue.main.async {
@@ -201,6 +219,7 @@ struct SetupView: View {
                 }
             }
         }.resume()
+        }
     }
 
     private func refresh() {
