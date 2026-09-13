@@ -390,10 +390,14 @@ function buyOmnimount(ev) {
       : "The store is opening very soon. Meanwhile you can build the free version from GitHub.");
     return;
   }
-  Paddle.Checkout.open({
+  var checkout = {
     items: [{ priceId: PADDLE_PRICE_ID, quantity: 1 }],
     settings: { locale: document.documentElement.lang === "es" ? "es" : "en" }
-  });
+  };
+  // Enlaces de regalo/promo: https://omnimount.es/?discount=CODIGO
+  var dc = new URLSearchParams(location.search).get("discount");
+  if (dc) checkout.discountCode = dc;
+  Paddle.Checkout.open(checkout);
 }
 </script>
 </body>
