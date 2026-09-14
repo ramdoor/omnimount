@@ -119,6 +119,15 @@
   section{padding:76px 0}
   h2{font-size:clamp(1.5rem,3vw,2.1rem);font-weight:800;letter-spacing:-.015em;margin:10px 0 34px;text-wrap:balance}
   .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .fgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:18px}
+  .fcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px;
+    text-decoration:none;color:inherit;display:block;transition:border-color .15s}
+  .fcard:hover{border-color:var(--mount)}
+  .fcard img{border-radius:12px;margin-bottom:10px}
+  .fcard h3{font-size:1.02rem;margin:0 0 6px;color:var(--ink)}
+  .fcard p{font-size:.9rem;color:var(--muted)}
+  @media (max-width:760px){.fgrid{grid-template-columns:1fr}}
+
   .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px}
   .card .tag{font-family:var(--mono);font-size:.72rem;color:var(--violet);letter-spacing:.08em}
   .card h3{font-size:1.02rem;margin:8px 0 6px}
@@ -342,6 +351,28 @@ disk4 (53.74 GB) — MassStorageClass
 </div></section>
 </main>
 
+<section id="friends"><div class="wrap">
+  <span class="eyebrow">Amigos</span>
+  <h2>Otras apps maravillosas para Mac</h2>
+  <div class="fgrid">
+    <a class="fcard" href="https://superfinder.es/">
+      <img src="/assets/friends/superfinder.png" alt="SuperFinder" width="56" height="56" loading="lazy">
+      <h3>SuperFinder</h3>
+      <p>Gestor de archivos de doble panel para macOS: colas de copia en tiempo real, SFTP y renombrado por lotes. Pago único.</p>
+    </a>
+    <a class="fcard" href="https://shotdock.app/">
+      <img src="/assets/friends/shotdock.png" alt="ShotDock" width="56" height="56" loading="lazy">
+      <h3>ShotDock</h3>
+      <p>Capturas y grabación de pantalla con anotación y herramientas de edición fotográfica profesionales. Pago único.</p>
+    </a>
+    <a class="fcard" href="https://shelldock.app/">
+      <img src="/assets/friends/shelldock.png" alt="ShellDock" width="56" height="56" loading="lazy">
+      <h3>ShellDock</h3>
+      <p>Cliente SSH y SFTP nativo: terminales en pestañas, claves y transferencias a doble panel en un solo sitio.</p>
+    </a>
+  </div>
+</div></section>
+
 <footer><div class="wrap">
   <span>© 2026 Omnimount · GPL-3.0</span>
   <span class="spacer"></span>
@@ -359,8 +390,6 @@ disk4 (53.74 GB) — MassStorageClass
   <a href="/refunds.html">Reembolsos</a>
   <a href="/contact.html">Soporte</a>
   <a href="https://www.trustpilot.com/review/omnimount.es" onclick="if(window.plausible)plausible('Trustpilot')">★ Reseñas en Trustpilot</a>
-  <a href="https://shotdock.app/" title="ShotDock — capturas, anotación y grabación de pantalla para Mac">Amigos: ShotDock</a>
-  <a href="https://shelldock.app/" title="ShellDock — cliente SSH y SFTP nativo para Mac">ShellDock</a>
 </div></footer>
 
 
