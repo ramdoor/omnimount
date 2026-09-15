@@ -63,40 +63,47 @@ struct SetupView: View {
                 action: { copy("make fuse2fs") }
             )
 
-            stepRow(
-                done: mountController.helper.state == .enabled,
-                title: L10n.t("Helper privilegiado (operaciones sin contraseña)", "Privileged helper (password-free operations)"),
-                detail: L10n.t("Daemon aprobado una única vez en Ajustes → Elementos de inicio.", "A daemon you approve once in Settings → Login Items."),
-                actionLabel: mountController.helper.state == .requiresApproval ? L10n.t("Abrir Elementos de inicio", "Open Login Items") : L10n.t("Activar helper", "Enable helper"),
-                action: {
-                    if mountController.helper.state == .requiresApproval {
-                        if #available(macOS 13.0, *) {
+            if #available(macOS 13.0, *) {
+                stepRow(
+                    done: mountController.helper.state == .enabled,
+                    title: L10n.t("Helper privilegiado (operaciones sin contraseña)", "Privileged helper (password-free operations)"),
+                    detail: L10n.t("Daemon aprobado una única vez en Ajustes → Elementos de inicio.", "A daemon you approve once in Settings → Login Items."),
+                    actionLabel: mountController.helper.state == .requiresApproval ? L10n.t("Abrir Elementos de inicio", "Open Login Items") : L10n.t("Activar helper", "Enable helper"),
+                    action: {
+                        if mountController.helper.state == .requiresApproval {
                             SMAppService.openSystemSettingsLoginItems()
+                        } else {
+                            mountController.helper.install()
                         }
-                    } else {
-                        mountController.helper.install()
                     }
-                }
-            )
+                )
 
-            stepRow(
-                done: helperReachable && helperHasFDA,
-                title: helperFDATitle,
-                detail: helperNotResponding
-                    ? L10n.t("El helper está registrado pero no arranca (suele pasar tras actualizar la app). \"Reparar helper\" lo re-registra; después vuelve a comprobar.", "The helper is registered but won't start (usually after updating the app). \"Repair helper\" re-registers it; then check again.")
-                    : L10n.t("Añade con + el binario /Applications/Omnimount.app/Contents/MacOS/OmnimountHelper (Cmd+Mayús+G para pegar la ruta).", "Add the binary /Applications/Omnimount.app/Contents/MacOS/OmnimountHelper with + (Cmd+Shift+G to paste the path)."),
-                actionLabel: helperNotResponding
-                    ? L10n.t("Reparar helper", "Repair helper")
-                    : L10n.t("Abrir Acceso total al disco", "Open Full Disk Access"),
-                action: {
-                    if helperNotResponding {
-                        mountController.helper.repair()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { refresh() }
-                    } else if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
-                        NSWorkspace.shared.open(url)
+                stepRow(
+                    done: helperReachable && helperHasFDA,
+                    title: helperFDATitle,
+                    detail: helperNotResponding
+                        ? L10n.t("El helper está registrado pero no arranca (suele pasar tras actualizar la app). \"Reparar helper\" lo re-registra; después vuelve a comprobar.", "The helper is registered but won't start (usually after updating the app). \"Repair helper\" re-registers it; then check again.")
+                        : L10n.t("Añade con + el binario /Applications/Omnimount.app/Contents/MacOS/OmnimountHelper (Cmd+Mayús+G para pegar la ruta).", "Add the binary /Applications/Omnimount.app/Contents/MacOS/OmnimountHelper with + (Cmd+Shift+G to paste the path)."),
+                    actionLabel: helperNotResponding
+                        ? L10n.t("Reparar helper", "Repair helper")
+                        : L10n.t("Abrir Acceso total al disco", "Open Full Disk Access"),
+                    action: {
+                        if helperNotResponding {
+                            mountController.helper.repair()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { refresh() }
+                        } else if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
+                            NSWorkspace.shared.open(url)
+                        }
                     }
-                }
-            )
+                )
+            } else {
+                // macOS 12: el helper sin contraseña (SMAppService) no existe.
+                // No es un paso pendiente; se informa de que se pedirá la
+                // contraseña de administrador al montar.
+                infoRow(
+                    title: L10n.t("Montaje con contraseña de administrador", "Mounting with an admin password"),
+                    detail: L10n.t("El montaje sin contraseña necesita macOS 13 o posterior. En Monterey, Omnimount te pedirá tu contraseña de administrador cada vez que montes o expulses. El resto funciona igual.", "Password-free mounting needs macOS 13 or later. On Monterey, Omnimount asks for your admin password each time you mount or eject. Everything else works the same."))
+            }
 
             if let copied = copiedCommand {
                 Label(L10n.t("Copiado: \(copied) — pégalo en Terminal", "Copied: \(copied) — paste it in Terminal"), systemImage: "doc.on.clipboard")
@@ -162,6 +169,22 @@ struct SetupView: View {
                         .controlSize(.small)
                         .padding(.top, 2)
                 }
+            }
+            Spacer()
+        }
+        .padding(.vertical, 5)
+    }
+
+    /// Fila informativa (ni pendiente ni completada): un punto neutro y texto,
+    /// sin botón de acción. Para pasos que no aplican en esta versión de macOS.
+    private func infoRow(title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "info.circle")
+                .foregroundStyle(.secondary)
+                .font(.title3)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.body.weight(.medium))
+                Text(detail).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
         }
