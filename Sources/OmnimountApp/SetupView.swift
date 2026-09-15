@@ -70,7 +70,9 @@ struct SetupView: View {
                 actionLabel: mountController.helper.state == .requiresApproval ? L10n.t("Abrir Elementos de inicio", "Open Login Items") : L10n.t("Activar helper", "Enable helper"),
                 action: {
                     if mountController.helper.state == .requiresApproval {
-                        SMAppService.openSystemSettingsLoginItems()
+                        if #available(macOS 13.0, *) {
+                            SMAppService.openSystemSettingsLoginItems()
+                        }
                     } else {
                         mountController.helper.install()
                     }

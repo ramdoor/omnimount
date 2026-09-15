@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Omnimount",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS(.v12)],
     products: [
         .library(name: "OmnimountKit", targets: ["OmnimountKit"]),
         .executable(name: "omnimount", targets: ["OmnimountCLI"]),

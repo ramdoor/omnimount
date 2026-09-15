@@ -16,6 +16,10 @@ final class HelperClient: ObservableObject {
 
     @Published var state: HelperState = .notRegistered
 
+    /// El helper sin contraseña usa SMAppService, que es de macOS 13+. En
+    /// macOS 12 no está disponible: la app recurre al montaje con diálogo de
+    /// administrador (MountController.runPrivileged) y el CLI para el resto.
+    @available(macOS 13.0, *)
     private var service: SMAppService {
         SMAppService.daemon(plistName: HelperConstants.plistName)
     }
@@ -23,6 +27,10 @@ final class HelperClient: ObservableObject {
     init() { refreshState() }
 
     func refreshState() {
+        guard #available(macOS 13.0, *) else {
+            state = .unavailable(L10n.t("requiere macOS 13 o posterior", "requires macOS 13 or later"))
+            return
+        }
         switch service.status {
         case .enabled: state = .enabled
         case .requiresApproval: state = .requiresApproval
@@ -34,6 +42,7 @@ final class HelperClient: ObservableObject {
     /// Registra el daemon. Si macOS exige aprobación, abre el panel de
     /// Elementos de inicio para que el usuario lo active.
     func install() {
+        guard #available(macOS 13.0, *) else { refreshState(); return }
         do {
             try service.register()
             refreshState()
@@ -51,6 +60,7 @@ final class HelperClient: ObservableObject {
     }
 
     func uninstall() {
+        guard #available(macOS 13.0, *) else { return }
         try? service.unregister()
         refreshState()
     }
@@ -60,6 +70,7 @@ final class HelperClient: ObservableObject {
     /// coincidir con el binario nuevo. Des-registrar y volver a registrar la
     /// refresca.
     func repair() {
+        guard #available(macOS 13.0, *) else { return }
         try? service.unregister()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.install()

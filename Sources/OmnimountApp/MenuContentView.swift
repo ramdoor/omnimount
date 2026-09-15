@@ -5,9 +5,15 @@ import OmnimountKit
 struct MenuContentView: View {
     @EnvironmentObject private var monitor: DiskMonitor
     @EnvironmentObject private var mountController: MountController
-    @Environment(\.openWindow) private var openWindow
 
     private var diagnosis: ToolLocator.Diagnosis { ToolLocator.diagnose() }
+
+    /// Abre la ventana de Configuración vía AppDelegate (funciona en 12 y 13+;
+    /// evita openWindow / la escena Window, que son de macOS 13+).
+    private func openSetup() {
+        NotificationCenter.default.post(name: .omnimountOpenSetup, object: nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -102,8 +108,7 @@ struct MenuContentView: View {
                     NSApp.activate(ignoringOtherApps: true)
                 }
                 Button(L10n.t("Configuración…", "Setup…")) {
-                    openWindow(id: "setup")
-                    NSApp.activate(ignoringOtherApps: true)
+                    openSetup()
                 }
                 Spacer()
                 Button(L10n.t("Salir", "Quit")) { NSApplication.shared.terminate(nil) }
@@ -133,7 +138,9 @@ struct MenuContentView: View {
                 Label(L10n.t("Falta aprobar el helper en Ajustes → Elementos de inicio", "Approve the helper in Settings → Login Items"), systemImage: "clock.badge.exclamationmark")
                     .font(.caption)
                     .foregroundStyle(.orange)
-                Button(L10n.t("Abrir Ajustes", "Open Settings")) { SMAppService.openSystemSettingsLoginItems() }
+                Button(L10n.t("Abrir Ajustes", "Open Settings")) {
+                    if #available(macOS 13.0, *) { SMAppService.openSystemSettingsLoginItems() }
+                }
                     .controlSize(.small)
             }
         case .notRegistered:
