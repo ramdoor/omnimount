@@ -10,15 +10,17 @@ cd "$REPO_DIR"
 SCRATCH="${OMNIMOUNT_SCRATCH:-$HOME/.omnimount-build}"
 
 echo "==> Compilando en modo release"
-swift build -c release --scratch-path "$SCRATCH"
+swift build -c release --arch arm64 --arch x86_64 --scratch-path "$SCRATCH"
+# Con --arch múltiple, SPM deja los productos universales en apple/Products/Release.
+RELEASE_DIR="$SCRATCH/apple/Products/Release"
 
 APP="$REPO_DIR/dist/Omnimount.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" \
          "$APP/Contents/Library/LaunchDaemons"
 
-cp "$SCRATCH/release/OmnimountApp" "$APP/Contents/MacOS/Omnimount"
-cp "$SCRATCH/release/OmnimountHelper" "$APP/Contents/MacOS/OmnimountHelper"
+cp "$RELEASE_DIR/OmnimountApp" "$APP/Contents/MacOS/Omnimount"
+cp "$RELEASE_DIR/OmnimountHelper" "$APP/Contents/MacOS/OmnimountHelper"
 
 # Daemon SMAppService: BundleProgram es relativo a la raíz del bundle.
 cat > "$APP/Contents/Library/LaunchDaemons/org.omnimount.helper.plist" <<'PLIST'
@@ -51,8 +53,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key>              <string>Omnimount</string>
     <key>CFBundleDisplayName</key>       <string>Omnimount</string>
     <key>CFBundleIdentifier</key>        <string>org.omnimount.app</string>
-    <key>CFBundleVersion</key>           <string>0.2.1</string>
-    <key>CFBundleShortVersionString</key><string>0.2.1</string>
+    <key>CFBundleVersion</key>           <string>0.3.0</string>
+    <key>CFBundleShortVersionString</key><string>0.3.0</string>
     <key>CFBundleExecutable</key>        <string>Omnimount</string>
     <key>CFBundleIconFile</key>          <string>AppIcon</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>
@@ -70,14 +72,14 @@ cp "$REPO_DIR/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 # Binarios autocontenidos: el CLI y fuse2fs viajan dentro del bundle
 # (ToolLocator busca junto al ejecutable). Así el .pkg solo instala la app.
-cp "$SCRATCH/release/omnimount" "$APP/Contents/MacOS/omnimount-cli"
+cp "$RELEASE_DIR/omnimount" "$APP/Contents/MacOS/omnimount-cli"
 if [ -f "$REPO_DIR/vendor/bin/fuse2fs" ]; then
     cp "$REPO_DIR/vendor/bin/fuse2fs" "$APP/Contents/MacOS/fuse2fs"
 else
     echo "AVISO: vendor/bin/fuse2fs no existe (ejecuta 'make fuse2fs'); el bundle no incluirá fuse2fs."
 fi
 
-# Resto de herramientas autocontenidas (0.2.1): NTFS compilado contra FUSE-T
+# Resto de herramientas autocontenidas (0.3.0): NTFS compilado contra FUSE-T
 # y utilidades ext4 estáticas. mke2fs se copia también con los nombres
 # mkfs.ext* porque elige el tipo de FS según argv[0].
 for tool in ntfs-3g mkntfs ntfsfix e2fsck mke2fs tune2fs; do

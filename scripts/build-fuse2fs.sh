@@ -108,47 +108,48 @@ open(path, "w").write(src)
 print("   parche aplicado")
 PY
 
-mkdir -p build && cd build
+# --- Build universal: una pasada por arquitectura y lipo al final ---
+build_one() {
+    ARCH="$1"
+    mkdir -p "build-$ARCH" && cd "build-$ARCH"
+    HOSTFLAG=""
+    [ "$ARCH" = "x86_64" ] && HOSTFLAG="--host=x86_64-apple-darwin"
+    if [ "$BACKEND" = "macfuse" ]; then
+        # OJO: sin -I/usr/local/include (taparía las cabeceras fuse3).
+        PKG_CONFIG_PATH="/usr/local/lib/pkgconfig" \
+        CC="clang -arch $ARCH" \
+        CPPFLAGS="-D_FILE_OFFSET_BITS=64" \
+        LDFLAGS="-L/usr/local/lib" \
+        ../configure --enable-fuse2fs --disable-nls --disable-uuidd --disable-fsck $HOSTFLAG >/dev/null
+        make -j"$(sysctl -n hw.ncpu)" >/dev/null
+    else
+        # FUSE-T (fuse2): anular pkg-config y enlazar libfuse-t explícita.
+        PKG_CONFIG=/usr/bin/false \
+        CC="clang -arch $ARCH" \
+        CPPFLAGS="-I/usr/local/include -D_FILE_OFFSET_BITS=64" \
+        LDFLAGS="-L/usr/local/lib" \
+        ../configure --enable-fuse2fs --disable-nls --disable-uuidd --disable-fsck $HOSTFLAG >/dev/null
+        make -j"$(sysctl -n hw.ncpu)" libs >/dev/null
+        make -C misc fuse2fs \
+            LIBFUSE="/usr/local/lib/libfuse-t.dylib -Wl,-rpath,/usr/local/lib" >/dev/null
+    fi
+    make -C e2fsck e2fsck >/dev/null
+    make -C misc mke2fs tune2fs >/dev/null
+    cd ..
+}
 
-if [ "$BACKEND" = "macfuse" ]; then
-    # OJO: no añadir -I/usr/local/include a CPPFLAGS — ahí vive el fuse.h de
-    # la API fuse2 y taparía las cabeceras de fuse3, produciendo un binario
-    # fuse2 enlazado contra libfuse3 (falla en ejecución con "unknown option
-    # use_ino").
-    PKG_CONFIG_PATH="/usr/local/lib/pkgconfig" \
-    CPPFLAGS="-D_FILE_OFFSET_BITS=64" \
-    LDFLAGS="-L/usr/local/lib" \
-    ../configure --enable-fuse2fs --disable-nls --disable-uuidd --disable-fsck
-    echo "==> Compilando (fuse3/macFUSE)"
-    make -j"$(sysctl -n hw.ncpu)"
-else
-    # FUSE-T: API fuse2. Anular pkg-config para que configure no elija fuse3,
-    # y enlazar explícitamente libfuse-t (su install name usa @rpath).
-    PKG_CONFIG=/usr/bin/false \
-    CPPFLAGS="-I/usr/local/include -D_FILE_OFFSET_BITS=64" \
-    LDFLAGS="-L/usr/local/lib" \
-    ../configure --enable-fuse2fs --disable-nls --disable-uuidd --disable-fsck
-    echo "==> Compilando (fuse2/FUSE-T)"
-    make -j"$(sysctl -n hw.ncpu)" libs
-    make -C misc fuse2fs \
-        LIBFUSE="/usr/local/lib/libfuse-t.dylib -Wl,-rpath,/usr/local/lib"
-fi
-
-FUSE2FS="misc/fuse2fs"
-if [ ! -x "$FUSE2FS" ]; then
-    echo "ERROR: la compilación terminó pero no existe $FUSE2FS" >&2
-    exit 1
-fi
-
-echo "==> Compilando herramientas ext4 estáticas (e2fsck, mke2fs, tune2fs)"
-make -C e2fsck e2fsck >/dev/null
-make -C misc mke2fs tune2fs >/dev/null
+echo "==> Compilando arm64"
+build_one arm64
+echo "==> Compilando x86_64 (configure corre sus tests bajo Rosetta)"
+build_one x86_64
 
 mkdir -p "$VENDOR_BIN"
-cp "$FUSE2FS" "$VENDOR_BIN/fuse2fs"
-cp e2fsck/e2fsck misc/mke2fs misc/tune2fs "$VENDOR_BIN/"
+for pair in fuse2fs:misc/fuse2fs e2fsck:e2fsck/e2fsck mke2fs:misc/mke2fs tune2fs:misc/tune2fs; do
+    name="${pair%%:*}"; rel="${pair#*:}"
+    lipo -create "build-arm64/$rel" "build-x86_64/$rel" -output "$VENDOR_BIN/$name"
+done
+
 echo ""
-echo "==> fuse2fs ($BACKEND) instalado en $VENDOR_BIN/fuse2fs"
+echo "==> Binarios universales en $VENDOR_BIN:"
+for t in fuse2fs e2fsck mke2fs tune2fs; do lipo -info "$VENDOR_BIN/$t"; done
 "$VENDOR_BIN/fuse2fs" --version 2>&1 | head -2 || true
-echo ""
-echo "Instálalo en el sistema con: make fuse2fs   (o cp a /opt/homebrew/sbin/)"
