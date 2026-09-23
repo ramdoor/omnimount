@@ -53,8 +53,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key>              <string>Omnimount</string>
     <key>CFBundleDisplayName</key>       <string>Omnimount</string>
     <key>CFBundleIdentifier</key>        <string>org.omnimount.app</string>
-    <key>CFBundleVersion</key>           <string>0.4.1</string>
-    <key>CFBundleShortVersionString</key><string>0.4.1</string>
+    <key>CFBundleVersion</key>           <string>0.4.2</string>
+    <key>CFBundleShortVersionString</key><string>0.4.2</string>
     <key>CFBundleExecutable</key>        <string>Omnimount</string>
     <key>CFBundleIconFile</key>          <string>AppIcon</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>
@@ -79,7 +79,7 @@ else
     echo "AVISO: vendor/bin/fuse2fs no existe (ejecuta 'make fuse2fs'); el bundle no incluirá fuse2fs."
 fi
 
-# Resto de herramientas autocontenidas (0.4.1): NTFS compilado contra FUSE-T
+# Resto de herramientas autocontenidas (0.4.2): NTFS compilado contra FUSE-T
 # y utilidades ext4 estáticas. mke2fs se copia también con los nombres
 # mkfs.ext* porque elige el tipo de FS según argv[0].
 for tool in ntfs-3g mkntfs ntfsfix e2fsck mke2fs tune2fs; do

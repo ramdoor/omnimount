@@ -153,31 +153,40 @@ public enum Cloner {
         var lastReport = Date.distantPast
 
         while true {
-            let chunk: Data
-            do {
-                chunk = try input.read(upToCount: chunkSize) ?? Data()
-            } catch {
-                throw CloneError.ioError("lectura en offset \(copied): \(error.localizedDescription)")
-            }
-            if chunk.isEmpty { break }
+            // autoreleasepool por iteración: sin él, los objetos Data/NSData
+            // temporales del read/write se acumulan durante todo el copiado
+            // (decenas de miles de iteraciones en un disco grande) y disparan
+            // la presión de memoria de macOS ("Forzar salida de aplicaciones"),
+            // que aborta el clon. Drenarlos cada vuelta mantiene la memoria plana.
+            let finished: Bool = try autoreleasepool {
+                let chunk: Data
+                do {
+                    chunk = try input.read(upToCount: chunkSize) ?? Data()
+                } catch {
+                    throw CloneError.ioError("lectura en offset \(copied): \(error.localizedDescription)")
+                }
+                if chunk.isEmpty { return true }
 
-            do {
-                try output.write(contentsOf: chunk)
-            } catch {
-                throw CloneError.ioError("escritura en offset \(copied): \(error.localizedDescription)")
-            }
+                do {
+                    try output.write(contentsOf: chunk)
+                } catch {
+                    throw CloneError.ioError("escritura en offset \(copied): \(error.localizedDescription)")
+                }
 
-            copied += Int64(chunk.count)
-            let now = Date()
-            if now.timeIntervalSince(lastReport) >= 0.5 || copied == totalBytes {
-                let elapsed = now.timeIntervalSince(start)
-                progress(CloneProgress(
-                    bytesCopied: copied,
-                    totalBytes: totalBytes,
-                    bytesPerSecond: elapsed > 0 ? Double(copied) / elapsed : 0
-                ))
-                lastReport = now
+                copied += Int64(chunk.count)
+                let now = Date()
+                if now.timeIntervalSince(lastReport) >= 0.5 || copied == totalBytes {
+                    let elapsed = now.timeIntervalSince(start)
+                    progress(CloneProgress(
+                        bytesCopied: copied,
+                        totalBytes: totalBytes,
+                        bytesPerSecond: elapsed > 0 ? Double(copied) / elapsed : 0
+                    ))
+                    lastReport = now
+                }
+                return false
             }
+            if finished { break }
         }
 
         try output.synchronize()
