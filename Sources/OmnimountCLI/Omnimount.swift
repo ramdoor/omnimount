@@ -7,7 +7,7 @@ struct Omnimount: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "omnimount",
         abstract: "Acceso de lectura/escritura a ext2/3/4 y NTFS en macOS, envolviendo fuse2fs y ntfs-3g.",
-        version: "0.4.2",
+        version: "0.4.3",
         subcommands: [
             List.self, Detect.self, Mount.self, Unmount.self,
             Test.self, Clone.self, Restore.self, Doctor.self,
@@ -169,6 +169,10 @@ struct Mount: ParsableCommand {
           help: "Desactiva las cuotas internas ext4 (discos de NAS) antes de montar. No borra datos.")
     var fixQuota = false
 
+    @Flag(name: .customLong("make-writable"),
+          help: "NTFS: limpia el estado 'sucio' de Windows (ntfsfix + remove_hiberfile) y monta en escritura.")
+    var makeWritable = false
+
     /// Tipos MBR/GPT que garantizan FAT: montables vía diskutil sin root.
     private static let fatContentTypes: Set<String> = [
         "Windows_FAT_32", "DOS_FAT_32", "DOS_FAT_16", "DOS_FAT_12",
@@ -197,9 +201,17 @@ struct Mount: ParsableCommand {
             try Mounter.disableExtQuota(devicePath: part.devicePath)
             detection2 = try FilesystemDetector.detect(devicePath: part.devicePath)
         }
-        let result = try Mounter.mount(partition: part, detection: detection2,
+        let result: MountResult
+        if makeWritable {
+            result = try Mounter.makeNtfsWritable(partition: part, detection: detection2)
+        } else {
+            result = try Mounter.mount(partition: part, detection: detection2,
                                        mountPoint: point, readOnly: readOnly)
+        }
         print("Montado \(result.devicePath) (\(result.filesystem.displayName)) en \(result.mountPoint)")
+        if result.readOnly {
+            print("AVISO: montado en SOLO LECTURA — Windows dejó el NTFS 'sucio' (Inicio rápido/hibernación). Vuelve a montar con --make-writable, o repáralo en Windows con chkdsk.")
+        }
         print(result.mountPoint) // última línea = punto de montaje, para consumo por la app
     }
 }

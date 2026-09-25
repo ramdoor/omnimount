@@ -255,6 +255,13 @@ private struct PartitionRow: View {
             if isBusy {
                 ProgressView().controlSize(.small)
             } else if let mountPoint = omnimountMountPoint {
+                if mountController.readOnlyPartitions.contains(partition.deviceIdentifier) {
+                    Button(L10n.t("Hacer escribible", "Make writable")) {
+                        mountController.makeWritable(partition) { monitor.refresh() }
+                    }
+                    .tint(.orange)
+                    .help(L10n.t("Solo lectura: Windows dejó el disco NTFS en estado inconsistente. Pulsa para hacerlo escribible.", "Read-only: Windows left this NTFS disk in an unclean state. Click to make it writable."))
+                }
                 Button {
                     mountController.revealInFinder(mountPoint)
                 } label: {

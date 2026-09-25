@@ -9,7 +9,7 @@ public enum HelperConstants {
     public static let plistName = "org.omnimount.helper.plist"
     /// Versión del protocolo; la app la comprueba al conectar para detectar
     /// helpers antiguos tras una actualización.
-    public static let protocolVersion = "3"
+    public static let protocolVersion = "4"
 }
 
 /// Operaciones privilegiadas que el daemon expone por XPC.
@@ -52,6 +52,11 @@ public enum HelperConstants {
     /// haber confirmado explícitamente con el usuario antes de llamar.
     func restore(imagePath: String, deviceIdentifier: String,
                  reply: @escaping (Bool, String) -> Void)
+
+    /// Vuelve escribible un NTFS que Windows dejó en solo lectura (ntfsfix +
+    /// remove_hiberfile). La app debe haber confirmado con el usuario.
+    func makeWritable(deviceIdentifier: String,
+                      reply: @escaping (Bool, String) -> Void)
 
     /// Autotest: ¿tiene el helper Acceso total al disco (TCC)?
     /// Sin él, todas las operaciones de disco fallarán con EPERM.

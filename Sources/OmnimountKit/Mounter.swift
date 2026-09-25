@@ -39,6 +39,19 @@ public struct MountResult: Sendable {
     public let mountPoint: String
     public let filesystem: DetectedFilesystem
     public let backend: String
+    /// true si el volumen quedó montado en solo lectura (NTFS "sucio" de
+    /// Windows). ntfs-3g cae a solo lectura para proteger los datos.
+    public let readOnly: Bool
+
+    public init(devicePath: String, mountPoint: String,
+                filesystem: DetectedFilesystem, backend: String,
+                readOnly: Bool = false) {
+        self.devicePath = devicePath
+        self.mountPoint = mountPoint
+        self.filesystem = filesystem
+        self.backend = backend
+        self.readOnly = readOnly
+    }
 }
 
 /// Monta y desmonta particiones ext2/3/4 y NTFS envolviendo fuse2fs y ntfs-3g.
@@ -59,7 +72,8 @@ public enum Mounter {
     public static func mount(partition: DiskPartition,
                              detection: DetectionResult,
                              mountPoint explicitMountPoint: String? = nil,
-                             readOnly: Bool = false) throws -> MountResult {
+                             readOnly: Bool = false,
+                             forceWritable: Bool = false) throws -> MountResult {
         // FAT/exFAT no necesitan FUSE: macOS los monta, aunque no automonte
         // particiones con tipo "oculto" (p. ej. 0x1C, la EASYROMS de ArkOS).
         if detection.filesystem == .fat || detection.filesystem == .exfat {
@@ -99,6 +113,9 @@ public enum Mounter {
             // windows_names: evita crear nombres inválidos para Windows.
             // big_writes mejora el rendimiento de escritura.
             options = ["local", "allow_other", "volname=\(volname)", "windows_names", "big_writes"]
+            // remove_hiberfile: monta en escritura un NTFS que Windows dejó
+            // hibernado (Inicio rápido), descartando la sesión suspendida.
+            if forceWritable { options.append("remove_hiberfile") }
         default:
             options = []
         }
@@ -134,8 +151,45 @@ public enum Mounter {
             devicePath: partition.devicePath,
             mountPoint: mountPoint,
             filesystem: detection.filesystem,
-            backend: toolPath
+            backend: toolPath,
+            readOnly: isMountReadOnly(mountPoint)
         )
+    }
+
+    /// true si el volumen montado en `mountPoint` es de solo lectura. Usa una
+    /// prueba de escritura real (crear y borrar un fichero oculto) en vez de
+    /// statfs: en FUSE-T el volumen se expone por NFS y el flag de solo lectura
+    /// de ntfs-3g NO se refleja en MNT_RDONLY. Debe ejecutarse como root (el
+    /// helper/CLI), donde la escritura solo falla si el FS es de solo lectura.
+    public static func isMountReadOnly(_ mountPoint: String) -> Bool {
+        let probe = (mountPoint as NSString).appendingPathComponent(".omnimount-writetest")
+        if FileManager.default.createFile(atPath: probe, contents: Data()) {
+            try? FileManager.default.removeItem(atPath: probe)
+            return false
+        }
+        return true
+    }
+
+    /// Vuelve escribible un NTFS que Windows dejó en solo lectura (hibernación
+    /// / Inicio rápido / desconexión sin expulsar): desmonta, limpia la marca
+    /// "dirty" con ntfsfix y remonta con remove_hiberfile. No toca ficheros de
+    /// datos; solo descarta la sesión de Windows en hibernación, si la hubiera.
+    public static func makeNtfsWritable(partition: DiskPartition,
+                                        detection: DetectionResult) throws -> MountResult {
+        guard isRoot else { throw MountError.notRoot }
+        guard detection.filesystem == .ntfs else {
+            throw MountError.unsupportedFilesystem(detection.filesystem)
+        }
+        // ntfsfix exige el dispositivo desmontado.
+        if let mp = currentMountPoint(devicePath: partition.devicePath)
+            ?? derivedMountPoint(partition: partition), isMountPoint(mp) {
+            try? unmount(mountPoint: mp)
+        }
+        if let ntfsfix = ToolLocator.find(.ntfsfix) {
+            // -d limpia la marca de "dirty" (chkdsk pendiente en Windows).
+            _ = try? ShellRunner.run(ntfsfix, ["-d", partition.devicePath])
+        }
+        return try mount(partition: partition, detection: detection, forceWritable: true)
     }
 
     /// Monta vía diskutil los FS que macOS ya entiende (FAT/exFAT) pero que no

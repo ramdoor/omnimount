@@ -155,6 +155,13 @@ final class HelperClient: ObservableObject {
         }, completion: completion)
     }
 
+    /// Vuelve escribible un NTFS que Windows dejó en solo lectura.
+    func makeWritable(deviceIdentifier: String, completion: @escaping (Bool, String) -> Void) {
+        withHelper(timeout: 300, { proxy, finish in
+            proxy.makeWritable(deviceIdentifier: deviceIdentifier, reply: finish)
+        }, completion: completion)
+    }
+
     /// Desactiva las cuotas ext4 internas de una partición (tune2fs + e2fsck).
     func fixQuota(deviceIdentifier: String, completion: @escaping (Bool, String) -> Void) {
         withHelper(timeout: 300, { proxy, finish in

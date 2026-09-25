@@ -169,12 +169,24 @@ final class MountController: ObservableObject {
             self.busyPartitions.remove(partition.deviceIdentifier)
             if ok {
                 self.lastMessage = nil
-                if verb == "mount", message.hasPrefix("/") {
-                    self.monitor?.recordOmnimountMount(
-                        deviceIdentifier: partition.deviceIdentifier, mountPoint: message)
-                    NSWorkspace.shared.open(URL(fileURLWithPath: message))
+                if verb == "mount" {
+                    // El helper antepone "RO:" al punto de montaje si el NTFS
+                    // quedó en solo lectura (Windows lo dejó "sucio").
+                    let readOnly = message.hasPrefix("RO:")
+                    let mp = readOnly ? String(message.dropFirst(3)) : message
+                    if mp.hasPrefix("/") {
+                        self.monitor?.recordOmnimountMount(
+                            deviceIdentifier: partition.deviceIdentifier, mountPoint: mp)
+                        if readOnly {
+                            self.readOnlyPartitions.insert(partition.deviceIdentifier)
+                        } else {
+                            self.readOnlyPartitions.remove(partition.deviceIdentifier)
+                        }
+                        NSWorkspace.shared.open(URL(fileURLWithPath: mp))
+                    }
                 } else if verb == "unmount" {
                     self.monitor?.forgetOmnimountMount(deviceIdentifier: partition.deviceIdentifier)
+                    self.readOnlyPartitions.remove(partition.deviceIdentifier)
                 }
             } else {
                 self.lastMessage = message
@@ -190,6 +202,58 @@ final class MountController: ObservableObject {
             helper.mount(deviceIdentifier: partition.deviceIdentifier, completion: handle)
         } else {
             helper.unmount(target: partition.deviceIdentifier, completion: handle)
+        }
+    }
+
+    /// Particiones montadas en solo lectura (NTFS que Windows dejó "sucio").
+    @Published var readOnlyPartitions: Set<String> = []
+
+    /// Vuelve escribible un NTFS en solo lectura (helper: ntfsfix + remount con
+    /// remove_hiberfile), tras confirmar con el usuario.
+    func makeWritable(_ partition: DiskPartition, completion: @escaping () -> Void) {
+        guard helper.state == .enabled else {
+            lastMessage = L10n.t(
+                "Hacerlo escribible requiere el helper activo.",
+                "Making it writable requires the helper enabled.")
+            completion(); return
+        }
+        let alert = NSAlert()
+        alert.messageText = L10n.t(
+            "¿Hacer escribible \(partition.volumeName ?? partition.deviceIdentifier)?",
+            "Make \(partition.volumeName ?? partition.deviceIdentifier) writable?")
+        alert.informativeText = L10n.t(
+            "Windows dejó este disco NTFS en solo lectura (Inicio rápido/hibernación o desconexión sin expulsar). Se limpiará ese estado para poder escribir. Tus ficheros no se tocan; solo se descarta una sesión de Windows en suspensión, si la hubiera.",
+            "Windows left this NTFS disk read-only (Fast Startup/hibernation, or unplugged without ejecting). That state will be cleared so you can write. Your files are untouched; only a suspended Windows session, if any, is discarded.")
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: L10n.t("Hacer escribible", "Make writable"))
+        alert.addButton(withTitle: L10n.t("Cancelar", "Cancel"))
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { completion(); return }
+
+        busyPartitions.insert(partition.deviceIdentifier)
+        helper.makeWritable(deviceIdentifier: partition.deviceIdentifier) { [weak self] ok, message in
+            guard let self else { return }
+            self.busyPartitions.remove(partition.deviceIdentifier)
+            if ok {
+                self.lastMessage = nil
+                self.readOnlyPartitions.remove(partition.deviceIdentifier)
+                let stillReadOnly = message.hasPrefix("RO:")
+                let mp = stillReadOnly ? String(message.dropFirst(3)) : message
+                if mp.hasPrefix("/") {
+                    self.monitor?.recordOmnimountMount(
+                        deviceIdentifier: partition.deviceIdentifier, mountPoint: mp)
+                    if stillReadOnly {
+                        // Siguió en solo lectura: el daño necesita chkdsk en Windows.
+                        self.readOnlyPartitions.insert(partition.deviceIdentifier)
+                        self.lastMessage = L10n.t(
+                            "No se pudo hacer escribible; el disco necesita repararse en Windows (chkdsk).",
+                            "Could not make it writable; the disk needs repair on Windows (chkdsk).")
+                    }
+                }
+            } else {
+                self.lastMessage = message
+            }
+            completion()
         }
     }
 

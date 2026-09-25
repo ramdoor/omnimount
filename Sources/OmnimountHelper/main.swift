@@ -42,7 +42,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
             let detection = try FilesystemDetector.detect(devicePath: part.devicePath)
             let result = try Mounter.mount(partition: part, detection: detection,
                                            readOnly: readOnly)
-            reply(true, result.mountPoint)
+            reply(true, (result.readOnly ? "RO:" : "") + result.mountPoint)
         } catch {
             reply(false, Self.friendlyMessage(error))
         }
@@ -94,6 +94,18 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
         do {
             try Cloner.restore(imagePath: imagePath, to: deviceIdentifier, progress: { _ in })
             reply(true, deviceIdentifier)
+        } catch {
+            reply(false, Self.friendlyMessage(error))
+        }
+    }
+
+    func makeWritable(deviceIdentifier: String,
+                      reply: @escaping (Bool, String) -> Void) {
+        do {
+            let part = try partition(for: deviceIdentifier)
+            let detection = try FilesystemDetector.detect(devicePath: part.devicePath)
+            let result = try Mounter.makeNtfsWritable(partition: part, detection: detection)
+            reply(true, (result.readOnly ? "RO:" : "") + result.mountPoint)
         } catch {
             reply(false, Self.friendlyMessage(error))
         }
