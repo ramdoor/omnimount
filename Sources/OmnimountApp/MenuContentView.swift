@@ -5,6 +5,7 @@ import OmnimountKit
 struct MenuContentView: View {
     @EnvironmentObject private var monitor: DiskMonitor
     @EnvironmentObject private var mountController: MountController
+    @AppStorage("menuTextSize") private var menuTextSizeRaw = MenuTextSize.normal.rawValue
 
     private var diagnosis: ToolLocator.Diagnosis { ToolLocator.diagnose() }
 
@@ -118,6 +119,7 @@ struct MenuContentView: View {
         }
         .padding(12)
         .frame(width: 340)
+        .dynamicTypeSize((MenuTextSize(rawValue: menuTextSizeRaw) ?? .normal).dynamicTypeSize)
         .onAppear { mountController.monitor = monitor }
         .sheet(item: $mountController.formatTarget) { partition in
             FormatSheet(partition: partition)

@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 import OmnimountKit
 
 /// Ejecuta las operaciones privilegiadas (montar/desmontar) relanzando el CLI
@@ -330,6 +331,37 @@ final class MountController: ObservableObject {
     }
 
     func revealInFinder(_ mountPoint: String) {
-        NSWorkspace.shared.open(URL(fileURLWithPath: mountPoint))
+        let newWindow = UserDefaults.standard.bool(forKey: "openInNewFinderWindow")
+        if newWindow {
+            // Forzar una ventana nueva del Finder (para comparar discos en
+            // paralelo). NSWorkspace reutiliza la ventana existente; Finder vía
+            // AppleScript sí abre una nueva.
+            let script = "tell application \"Finder\"\nmake new Finder window to (POSIX file \"\(mountPoint)\")\nactivate\nend tell"
+            DispatchQueue.global().async {
+                NSAppleScript(source: script)?.executeAndReturnError(nil)
+            }
+        } else {
+            NSWorkspace.shared.open(URL(fileURLWithPath: mountPoint))
+        }
+    }
+}
+
+/// Tamaño del texto del panel del menú, ajustable por el usuario.
+enum MenuTextSize: String, CaseIterable, Identifiable {
+    case normal, grande, muyGrande
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .normal: return L10n.t("Normal", "Normal")
+        case .grande: return L10n.t("Grande", "Large")
+        case .muyGrande: return L10n.t("Muy grande", "Extra large")
+        }
+    }
+    var dynamicTypeSize: DynamicTypeSize {
+        switch self {
+        case .normal: return .medium
+        case .grande: return .large
+        case .muyGrande: return .xxLarge
+        }
     }
 }

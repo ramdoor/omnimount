@@ -15,6 +15,8 @@ struct SetupView: View {
     @State private var helperReachable = false
     @State private var helperHasFDA = false
     @State private var copiedCommand: String?
+    @AppStorage("menuTextSize") private var menuTextSize = MenuTextSize.normal.rawValue
+    @AppStorage("openInNewFinderWindow") private var openInNewFinderWindow = false
 
     enum FuseLayer { case fuseT, macFUSE, none }
 
@@ -112,6 +114,25 @@ struct SetupView: View {
                     .padding(.top, 6)
             }
 
+            Divider().padding(.vertical, 4)
+
+            Text(L10n.t("Preferencias", "Preferences"))
+                .font(.headline)
+            HStack {
+                Text(L10n.t("Tamaño del texto del menú", "Menu text size"))
+                Spacer()
+                Picker("", selection: $menuTextSize) {
+                    ForEach(MenuTextSize.allCases) { size in
+                        Text(size.label).tag(size.rawValue)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 160)
+            }
+            Toggle(L10n.t("Abrir cada disco en una ventana nueva del Finder",
+                          "Open each disk in a new Finder window"),
+                   isOn: $openInNewFinderWindow)
+
             Spacer()
 
             HStack {
@@ -124,7 +145,7 @@ struct SetupView: View {
             }
         }
         .padding(20)
-        .frame(width: 560, height: 480, alignment: .topLeading)
+        .frame(width: 560, height: 600, alignment: .topLeading)
         .onAppear { refresh() }
     }
 
