@@ -9,6 +9,9 @@ final class DiskMonitor: ObservableObject {
 
     @Published var disks: [ExternalDisk] = []
     @Published var mountedByOmnimount: [String: String] = [:] // deviceIdentifier → mountPoint
+    /// Particiones NTFS que macOS montó en solo lectura por su cuenta (comporta-
+    /// miento nativo de macOS con NTFS). Omnimount ofrece "Hacer escribible".
+    @Published var readOnlyByMacOS: Set<String> = []
     @Published var retroMatch: RetroCardMatch?
     @Published var lastError: String?
 
@@ -68,9 +71,23 @@ final class DiskMonitor: ObservableObject {
                 let disks = try DiskLister.externalDisks()
                 let mounted = Self.omnimountMounts(disks: disks, session: session)
                 let retro = RetroCards.identify(partitions: disks.flatMap(\.partitions))
+                // NTFS que macOS montó en solo lectura: partición de tipo Windows,
+                // montada, que NO montó Omnimount, y cuya escritura falla. (exFAT/
+                // FAT, del mismo tipo, montan en escritura → no se marcan.)
+                var readOnly: Set<String> = []
+                for p in disks.flatMap(\.partitions) {
+                    guard let mp = p.mountPoint,
+                          mounted[p.deviceIdentifier] == nil,
+                          p.content == "Microsoft Basic Data"
+                            || p.content == "Windows_NTFS"
+                            || p.content == "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7"
+                    else { continue }
+                    if Mounter.isMountReadOnly(mp) { readOnly.insert(p.deviceIdentifier) }
+                }
                 await MainActor.run {
                     self.disks = disks
                     self.mountedByOmnimount = mounted
+                    self.readOnlyByMacOS = readOnly
                     self.retroMatch = retro
                     self.lastError = nil
                 }

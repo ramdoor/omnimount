@@ -257,7 +257,8 @@ private struct PartitionRow: View {
             if isBusy {
                 ProgressView().controlSize(.small)
             } else if let mountPoint = omnimountMountPoint {
-                if mountController.readOnlyPartitions.contains(partition.deviceIdentifier) {
+                if mountController.readOnlyPartitions.contains(partition.deviceIdentifier)
+                    || monitor.readOnlyByMacOS.contains(partition.deviceIdentifier) {
                     Button(L10n.t("Hacer escribible", "Make writable")) {
                         mountController.makeWritable(partition) { monitor.refresh() }
                     }

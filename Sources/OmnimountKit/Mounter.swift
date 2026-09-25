@@ -180,8 +180,10 @@ public enum Mounter {
         guard detection.filesystem == .ntfs else {
             throw MountError.unsupportedFilesystem(detection.filesystem)
         }
-        // ntfsfix exige el dispositivo desmontado.
-        if let mp = currentMountPoint(devicePath: partition.devicePath)
+        // ntfsfix exige el dispositivo desmontado. Cubre tanto el montaje de
+        // macOS (partition.mountPoint / diskutil) como uno propio de FUSE-T.
+        if let mp = partition.mountPoint
+            ?? currentMountPoint(devicePath: partition.devicePath)
             ?? derivedMountPoint(partition: partition), isMountPoint(mp) {
             try? unmount(mountPoint: mp)
         }
