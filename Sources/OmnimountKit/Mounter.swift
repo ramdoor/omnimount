@@ -156,6 +156,18 @@ public enum Mounter {
         )
     }
 
+    /// true si el volumen montado en `mountPoint` es de solo lectura según el
+    /// flag MNT_RDONLY (statfs). Fiable para los montajes NATIVOS de macOS
+    /// (p. ej. el NTFS de solo lectura que macOS monta por su cuenta — es lo
+    /// que Disk Utility muestra como "Writable: No"). NO fiable para los
+    /// montajes propios sobre FUSE-T (se expone por NFS): para esos, usar
+    /// isMountReadOnly (prueba de escritura) desde root.
+    public static func isMountReadOnlyByFlags(_ mountPoint: String) -> Bool {
+        var st = statfs()
+        guard statfs(mountPoint, &st) == 0 else { return false }
+        return (Int32(st.f_flags) & MNT_RDONLY) != 0
+    }
+
     /// true si el volumen montado en `mountPoint` es de solo lectura. Usa una
     /// prueba de escritura real (crear y borrar un fichero oculto) en vez de
     /// statfs: en FUSE-T el volumen se expone por NFS y el flag de solo lectura

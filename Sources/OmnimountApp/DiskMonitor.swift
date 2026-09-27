@@ -82,7 +82,9 @@ final class DiskMonitor: ObservableObject {
                             || p.content == "Windows_NTFS"
                             || p.content == "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7"
                     else { continue }
-                    if Mounter.isMountReadOnly(mp) { readOnly.insert(p.deviceIdentifier) }
+                    // statfs MNT_RDONLY: fiable para el montaje nativo de macOS
+                    // (la prueba de escritura como usuario no lo era).
+                    if Mounter.isMountReadOnlyByFlags(mp) { readOnly.insert(p.deviceIdentifier) }
                 }
                 await MainActor.run {
                     self.disks = disks
