@@ -9,6 +9,7 @@ public enum MountError: Error, LocalizedError {
     case unmountFailed(String)
     case fsckFailed(String)
     case ext4QuotaUnsupported(String)
+    case ext4NeedsRepair(String, String)
 
     public var errorDescription: String? {
         switch self {
@@ -26,6 +27,10 @@ public enum MountError: Error, LocalizedError {
             return L10n.t("No se pudo desmontar: \(message)", "Could not unmount: \(message)")
         case .fsckFailed(let message):
             return L10n.t("La verificación (fsck) encontró problemas: \(message)", "Verification (fsck) found problems: \(message)")
+        case .ext4NeedsRepair(let device, let detail):
+            return L10n.t(
+                "El sistema de ficheros ext4 de \(device) necesita reparación (e2fsck no pudo arreglarlo automáticamente; suele ocurrir tras una desconexión brusca). Ejecuta: sudo e2fsck -fy /dev/\(device) y vuelve a montar. Detalle: \(detail)",
+                "The ext4 filesystem on \(device) needs repair (e2fsck couldn't fix it automatically; common after an abrupt disconnect). Run: sudo e2fsck -fy /dev/\(device) and mount again. Detail: \(detail)")
         case .ext4QuotaUnsupported(let device):
             return L10n.t(
                 "Este disco usa cuotas internas de ext4 (habitual en discos de NAS), que fuse2fs no soporta. Desactívalas (no borra datos) con: sudo omnimount mount \(device) --fix-quota — o con tune2fs -O ^quota,^project.",
@@ -98,6 +103,20 @@ public enum Mounter {
         default: throw MountError.unsupportedFilesystem(detection.filesystem)
         }
         guard let toolPath = ToolLocator.find(tool) else { throw MountError.toolMissing(tool) }
+
+        // fuse2fs NO reproduce el journal de ext3/4. Un disco que no se
+        // desmontó limpiamente (desconectado de un NAS/Linux) queda "sucio" y
+        // fuse2fs falla al leerlo ("cannot read block bitmap"). e2fsck -p
+        // reproduce el journal y corrige inconsistencias seguras; si hiciera
+        // falta reparación manual (código ≥4), se informa en vez de montar un
+        // sistema de ficheros inconsistente. Se omite en montaje de solo lectura.
+        if tool == .fuse2fs, !readOnly, let e2fsck = ToolLocator.find(.e2fsck) {
+            let check = try ShellRunner.run(e2fsck, ["-p", partition.devicePath])
+            if check.exitCode >= 4 {
+                let detail = (check.stdout + " " + check.stderr).trimmingCharacters(in: .whitespacesAndNewlines)
+                throw MountError.ext4NeedsRepair(partition.deviceIdentifier, detail)
+            }
+        }
 
         let mountPoint = explicitMountPoint ?? defaultMountPoint(partition: partition, detection: detection)
         try FileManager.default.createDirectory(atPath: mountPoint, withIntermediateDirectories: true)

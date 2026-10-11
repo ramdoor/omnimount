@@ -118,7 +118,9 @@ final class HelperClient: ObservableObject {
 
     func mount(deviceIdentifier: String,
                completion: @escaping (Bool, String) -> Void) {
-        withHelper({ proxy, finish in
+        // Montar ext4 incluye un e2fsck -p previo (reproduce el journal); en un
+        // disco grande y "sucio" puede tardar minutos. Timeout generoso.
+        withHelper(timeout: 1800, { proxy, finish in
             proxy.mount(deviceIdentifier: deviceIdentifier, readOnly: false, reply: finish)
         }, completion: completion)
     }
