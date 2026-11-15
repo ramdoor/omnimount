@@ -135,6 +135,13 @@ sudo omnimount unhide disk4s3                # quita el flag "oculta" (FAT 0x1C,
 sudo omnimount format disk4s3 ext4 --label EASYROMS   # formatea (confirmación estricta)
 ```
 
+Restaurar copia la imagen byte a byte; no redimensiona su sistema de archivos ni
+su tabla de particiones. Un destino mayor no se convierte automáticamente en un
+volumen mayor. En NTFS, una partición mayor que la imagen original también puede
+hacer que `ntfsfix` señale el sector de arranque de respaldo fuera de su posición
+esperada. Usa particiones del mismo tamaño para una restauración exacta;
+redimensionar el sistema de archivos es una operación aparte.
+
 Detección por magic bytes:
 
 - **ext2/3/4** — superbloque en offset 1024, magic `0xEF53`; las feature flags
@@ -158,9 +165,42 @@ Detección por magic bytes:
 
 ```sh
 make build      # compila (scratch path en ~/.omnimount-build)
-make test       # tests del detector con imágenes sintéticas
+make test       # tests unitarios: detección, copia, preflight y ejecución de comandos
 make app        # dist/Omnimount.app firmada
 ```
+
+### Pruebas con imágenes de sistemas de ficheros
+
+Con macOS, Python 3, `swiftc`, FUSE-T y las herramientas del paso 2
+instalados o compilados, ejecuta:
+
+```sh
+python3 scripts/test-storage-images.py
+```
+
+El runner compila el `OmnimountKit` actual con un pequeño programa de prueba
+y usa `vendor/bin/` por defecto. Para comprobar otras compilaciones, admite
+`--ext-bin /ruta/herramientas-ext` y `--ntfs-bin /ruta/herramientas-ntfs`.
+La opción `--work-dir /tmp/omnimount-storage-check` elige un directorio que
+no debe existir; sin ella se crea uno temporal automáticamente. Se conserva
+el directorio con las imágenes, los logs de cada comando y `results.json`.
+
+Las pruebas usan imágenes de 64 MiB en archivos regulares: montaje ext4/NTFS
+en lectura/escritura y solo lectura, hashes de los archivos, conservación
+del SHA-256 de la imagen en solo lectura, identidad de bytes tras
+clonado/restauración, remontaje de las imágenes restauradas, verificaciones
+offline, hibernación NTFS sintética y retirada de cuotas ext4. El caso de
+recuperación del journal usa además
+`/opt/homebrew/opt/e2fsprogs/sbin/debugfs` cuando está disponible. Consulta
+en `results.json` las pruebas omitidas y los montajes que pudieran quedar
+activos antes de borrar el directorio.
+
+Se ejercitan los motores de sistemas de ficheros y el código actual del kit
+para detección, copia y preflight. No se ejecutan la app/helper ni las
+entradas de clonado/restauración de dispositivos en bruto, ni se usa
+`sudo`, se accede a discos físicos o se cambia la app instalada. Un resultado
+correcto en Apple Silicon no valida hardware Intel real, el disco de un
+cliente ni un fallo específico de discos grandes.
 
 Estructura:
 
@@ -169,7 +209,7 @@ Sources/OmnimountKit/     DiskLister, FilesystemDetector, Mounter, Cloner,
                           Formatter, RetroCards, ToolLocator, HelperProtocol
 Sources/OmnimountCLI/     list, detect, mount, unmount, test, clone, restore,
                           unhide, format, doctor
-Sources/OmnimountApp/     MenuBarExtra + DiskArbitration + cliente XPC
+Sources/OmnimountApp/     NSStatusItem/NSPopover + SwiftUI + DiskArbitration + cliente XPC
 Sources/OmnimountHelper/  daemon privilegiado (SMAppService)
 scripts/build-fuse2fs.sh  compila fuse2fs (BACKEND=fuse-t|macfuse)
 ```
@@ -179,12 +219,24 @@ scripts usan `--scratch-path` fuera del repo por ese motivo.
 
 ## Limitaciones conocidas
 
+- Los volúmenes ext4 con la función `casefold`, usada en algunas tarjetas de
+  Steam Deck, no están soportados por fuse2fs. Un resultado limpio de e2fsck
+  no elimina esa limitación.
+- Antes de clonar o restaurar un disco con un volumen montado mediante FUSE-T,
+  expulsa ese volumen desde Omnimount. El nombre del montaje FUSE-T no identifica
+  inequívocamente el dispositivo; el clonado/restauración se detiene si no puede
+  confirmar esa asociación.
 - Los volúmenes montados por el helper/root no aparecen en la barra lateral
   del Finder (DiskArbitration no los publica en la sesión del usuario). El
   volumen funciona con normalidad en `/Volumes/<nombre>`; arrástralo una vez
   a Favoritos si lo quieres a mano.
-- NTFS con backend FUSE-T está pendiente de validación (ntfs-3g de Homebrew
-  enlaza contra las librerías de macFUSE).
-- Los binarios FUSE no se empaquetan con la app: deben estar instalados.
+- NTFS sobre FUSE-T está validado con imágenes en archivos regulares y
+  ntfs-3g compilado contra FUSE-T: lectura/escritura, solo lectura y
+  recuperación explícita de hibernación sintética. Usa el script de
+  compilación anterior; ntfs-3g-mac de Homebrew enlaza contra macFUSE.
+- La app incluye los ejecutables de sistemas de ficheros de `vendor/bin/`
+  al compilar con `make app` o `make install`; la versión de pago los incluye
+  precompilados. La capa FUSE se instala aparte: FUSE-T desde Setup o
+  Homebrew, o macFUSE con los permisos del sistema que requiere.
 - fsck de verificación es no-destructivo (`e2fsck -fn`, `ntfsfix -n`): informa,
   no repara.

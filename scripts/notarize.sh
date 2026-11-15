@@ -18,16 +18,29 @@ set -euo pipefail
 PKG="${1:?Uso: notarize.sh <ruta.pkg>}"
 PROFILE="${NOTARY_PROFILE:-omnimount-notary}"
 
-if ! security find-identity -v 2>/dev/null | grep -q "Developer ID"; then
-    echo "ERROR: no hay certificados 'Developer ID'. Inscríbete en el Apple" >&2
-    echo "Developer Program y crea los certificados (ver cabecera del script)." >&2
-    exit 1
-fi
+SIGNATURE="$(pkgutil --check-signature "$PKG")"
+case "$SIGNATURE" in
+    *"Developer ID Installer:"*) ;;
+    *) echo "ERROR: el pkg no tiene una firma Developer ID Installer válida." >&2; exit 1 ;;
+esac
 
 echo "==> Enviando a notarización (perfil: $PROFILE)"
-xcrun notarytool submit "$PKG" --keychain-profile "$PROFILE" --wait
+RESULT="${PKG%.pkg}.notary.json"
+xcrun notarytool submit "$PKG" --keychain-profile "$PROFILE" --wait --output-format json > "$RESULT"
+SUBMISSION_ID="$(python3 - "$RESULT" <<'PY'
+import json
+import sys
+with open(sys.argv[1]) as response:
+    result = json.load(response)
+if result.get("status") != "Accepted" or not result.get("id"):
+    raise SystemExit("ERROR: notarización no aceptada; revisa " + sys.argv[1])
+print(result["id"])
+PY
+)"
+xcrun notarytool log "$SUBMISSION_ID" --keychain-profile "$PROFILE" "${PKG%.pkg}.notary-log.json"
 
 echo "==> Grapando el ticket al pkg"
 xcrun stapler staple "$PKG"
+xcrun stapler validate "$PKG"
 
 echo "==> Listo: $PKG notarizado y grapado. Se puede distribuir."

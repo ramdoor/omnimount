@@ -1,0 +1,21 @@
+<h2>Omnimount 0.4.8</h2>
+<p>This update improves disk-operation reliability. macOS 13 or later is required.</p>
+<ul>
+  <li>NTFS tools now link explicitly to FUSE-T, preventing an unintended dependency on macFUSE when both are installed.</li>
+  <li>Read-only ext4 mounts preserve the underlying device, including its metadata and pending journal.</li>
+  <li>Stricter checks stop write operations when a filesystem check, NTFS preparation or unmount has not completed successfully.</li>
+  <li>Safer mount-point handling preserves existing folders and files when mounting fails.</li>
+  <li>Cloning uses the full partition size. Cloning and restoring handle already-unmounted partitions, check FUSE-T mounts and reject empty restore images. External tools can produce large diagnostic output without blocking Omnimount.</li>
+</ul>
+<p>Validation includes 51 automated tests and the production helper on a disposable USB drive with NTFS/ext4 test volumes on Apple Silicon: read/write mounts, cloning, restoration, quotas, and synthetic journal/hibernation cases. Universal binaries are included; physical Intel hardware was not tested.</p>
+<hr>
+<h2>Omnimount 0.4.8 — Español</h2>
+<p>Esta actualización mejora la fiabilidad de las operaciones de disco. Requiere macOS 13 o posterior.</p>
+<ul>
+  <li>Las herramientas NTFS enlazan explícitamente con FUSE-T para evitar usar macFUSE por accidente cuando ambos están instalados.</li>
+  <li>Los montajes ext4 en solo lectura conservan intacto el dispositivo, incluidos sus metadatos y el journal pendiente.</li>
+  <li>Las operaciones de escritura se detienen si la comprobación del sistema de archivos, la preparación NTFS o el desmontaje no terminan correctamente.</li>
+  <li>Si falla un montaje, se conservan las carpetas y archivos que ya existían en su destino.</li>
+  <li>El clonado utiliza el tamaño completo de la partición. Clonar y restaurar reconocen las particiones ya desmontadas, comprueban los montajes FUSE-T y rechazan imágenes vacías. La salida abundante de las herramientas externas ya no bloquea Omnimount.</li>
+</ul>
+<p>La validación incluye 51 pruebas automatizadas y el helper de producción con volúmenes NTFS/ext4 de prueba en un USB prescindible, sobre Apple Silicon: lectura/escritura, clonado, restauración, cuotas y casos sintéticos de journal/hibernación. Se incluyen binarios universales; no se ha probado en hardware Intel físico.</p>

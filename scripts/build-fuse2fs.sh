@@ -16,8 +16,9 @@ set -euo pipefail
 E2FSPROGS_VERSION="${E2FSPROGS_VERSION:-1.47.3}"
 BACKEND="${BACKEND:-fuse-t}"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-VENDOR_BIN="$REPO_DIR/vendor/bin"
-BUILD_DIR="${TMPDIR:-/tmp}/omnimount-fuse2fs-build"
+VENDOR_BIN="${E2FSPROGS_OUTPUT_DIR:-$REPO_DIR/vendor/bin}"
+BUILD_DIR="${E2FSPROGS_BUILD_DIR:-${TMPDIR:-/tmp}/omnimount-fuse2fs-build}"
+export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.0}"
 
 case "$BACKEND" in
 fuse-t)
@@ -45,16 +46,25 @@ macfuse)
 esac
 
 echo "==> Backend: $BACKEND"
-echo "==> Descargando e2fsprogs $E2FSPROGS_VERSION"
 mkdir -p "$BUILD_DIR"
+BUILD_DIR="$(cd "$BUILD_DIR" && pwd)"
 cd "$BUILD_DIR"
-TARBALL="e2fsprogs-$E2FSPROGS_VERSION.tar.xz"
-if [ ! -f "$TARBALL" ]; then
-    curl -fL -o "$TARBALL" \
-        "https://mirrors.edge.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v$E2FSPROGS_VERSION/$TARBALL"
+if [ -n "${E2FSPROGS_SOURCE_DIR:-}" ]; then
+    # Copiar antes de parchear: no modificar unas fuentes facilitadas por el llamante.
+    rm -rf "e2fsprogs-$E2FSPROGS_VERSION.source-copy"
+    cp -R "$E2FSPROGS_SOURCE_DIR" "e2fsprogs-$E2FSPROGS_VERSION.source-copy"
+    rm -rf "e2fsprogs-$E2FSPROGS_VERSION"
+    mv "e2fsprogs-$E2FSPROGS_VERSION.source-copy" "e2fsprogs-$E2FSPROGS_VERSION"
+else
+    echo "==> Descargando e2fsprogs $E2FSPROGS_VERSION"
+    TARBALL="e2fsprogs-$E2FSPROGS_VERSION.tar.xz"
+    if [ ! -f "$TARBALL" ]; then
+        curl -fL -o "$TARBALL" \
+            "https://mirrors.edge.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v$E2FSPROGS_VERSION/$TARBALL"
+    fi
+    rm -rf "e2fsprogs-$E2FSPROGS_VERSION"
+    tar xf "$TARBALL"
 fi
-rm -rf "e2fsprogs-$E2FSPROGS_VERSION"
-tar xf "$TARBALL"
 cd "e2fsprogs-$E2FSPROGS_VERSION"
 
 echo "==> Aplicando parche Darwin (la API xattr de macOS lleva un parámetro 'position')"
@@ -108,6 +118,32 @@ open(path, "w").write(src)
 print("   parche aplicado")
 PY
 
+echo "==> Aplicando parche de solo lectura (sin escrituras de metadatos ni journal)"
+python3 - misc/fuse2fs.c <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+src = path.read_text()
+marker = "/* Omnimount: read-only means no writes to the backing device. */"
+anchor = "\tfuse_opt_parse(&args, &fctx, fuse2fs_opts, fuse2fs_opt_proc);"
+if marker not in src:
+    assert src.count(anchor) == 1, "no se encontró un punto único de parseo de opciones"
+    src = src.replace(anchor, anchor + """
+
+	/* Omnimount: read-only means no writes to the backing device. */
+	if (fctx.ro) {
+		flags &= ~EXT2_FLAG_RW;
+		/* A dirty journal must not be replayed onto a read-only image. */
+		fctx.norecovery = 1;
+	}
+""")
+    path.write_text(src)
+    print("   parche aplicado")
+else:
+    print("   (ya aplicado)")
+PY
+
 # --- Build universal: una pasada por arquitectura y lipo al final ---
 build_one() {
     ARCH="$1"
@@ -143,11 +179,39 @@ build_one arm64
 echo "==> Compilando x86_64 (configure corre sus tests bajo Rosetta)"
 build_one x86_64
 
-mkdir -p "$VENDOR_BIN"
+STAGED_BIN="$BUILD_DIR/universal-bin"
+mkdir -p "$STAGED_BIN"
 for pair in fuse2fs:misc/fuse2fs e2fsck:e2fsck/e2fsck mke2fs:misc/mke2fs tune2fs:misc/tune2fs; do
     name="${pair%%:*}"; rel="${pair#*:}"
-    lipo -create "build-arm64/$rel" "build-x86_64/$rel" -output "$VENDOR_BIN/$name"
+    lipo -create "build-arm64/$rel" "build-x86_64/$rel" -output "$STAGED_BIN/$name"
+    for ARCH in arm64 x86_64; do
+        lipo -verify_arch "$ARCH" "$STAGED_BIN/$name"
+        minimum="$(otool -arch "$ARCH" -l "$STAGED_BIN/$name" | awk '
+            $1 == "cmd" { build = ($2 == "LC_BUILD_VERSION"); legacy = ($2 == "LC_VERSION_MIN_MACOSX") }
+            !found && ((build && $1 == "minos") || (legacy && $1 == "version")) { minimum = $2; found = 1 }
+            END { print minimum }
+        ')"
+        if [ -z "$minimum" ] || ! awk -v version="$minimum" 'BEGIN {
+            split(version, part, ".");
+            exit !(part[1] < 13 || (part[1] == 13 && part[2] == 0 && part[3] == 0));
+        }'; then
+            echo "ERROR: $name ($ARCH) requiere macOS ${minimum:-desconocido}; recompila con MACOSX_DEPLOYMENT_TARGET=13.0." >&2
+            exit 1
+        fi
+    done
 done
+if [ "$BACKEND" = fuse-t ]; then
+    for ARCH in arm64 x86_64; do
+        dependencies="$(otool -arch "$ARCH" -L "$STAGED_BIN/fuse2fs")"
+        if ! printf '%s\n' "$dependencies" | grep -Fq 'libfuse-t.dylib' || \
+            printf '%s\n' "$dependencies" | grep -Eq 'libfuse[.][^[:space:]]*|libosxfuse|macfuse'; then
+            echo "ERROR: fuse2fs ($ARCH) no está enlazado exclusivamente contra FUSE-T." >&2
+            exit 1
+        fi
+    done
+fi
+mkdir -p "$VENDOR_BIN"
+for name in fuse2fs e2fsck mke2fs tune2fs; do cp "$STAGED_BIN/$name" "$VENDOR_BIN/$name"; done
 
 echo ""
 echo "==> Binarios universales en $VENDOR_BIN:"

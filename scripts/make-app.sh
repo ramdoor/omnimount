@@ -5,14 +5,24 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_DIR"
 
+# Fallar antes de compilar o reemplazar dist si los motores NTFS usan macFUSE.
+bash "$REPO_DIR/scripts/check-ntfs-backend.sh" "$REPO_DIR/vendor/bin"
+
 # Compilar fuera del árbol del repo: si el proyecto vive en una carpeta
 # sincronizada (OneDrive/Dropbox), .build/ la satura y bloquea ficheros.
 SCRATCH="${OMNIMOUNT_SCRATCH:-$HOME/.omnimount-build}"
 
 echo "==> Compilando en modo release"
 swift build -c release --arch arm64 --arch x86_64 --scratch-path "$SCRATCH"
-# Con --arch múltiple, SPM deja los productos universales en apple/Products/Release.
-RELEASE_DIR="$SCRATCH/apple/Products/Release"
+# SwiftPM cambió la ruta de productos universales entre motores de compilación.
+# Consultar la misma configuración evita depender de apple/ u out/.
+RELEASE_DIR="$(swift build -c release --arch arm64 --arch x86_64 --scratch-path "$SCRATCH" --show-bin-path)"
+for product in OmnimountApp OmnimountHelper omnimount; do
+    [ -x "$RELEASE_DIR/$product" ] || { echo "ERROR: no existe el producto compilado $RELEASE_DIR/$product" >&2; exit 1; }
+    for arch in arm64 x86_64; do
+        lipo -verify_arch "$arch" "$RELEASE_DIR/$product"
+    done
+done
 
 APP="$REPO_DIR/dist/Omnimount.app"
 rm -rf "$APP"
@@ -53,8 +63,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key>              <string>Omnimount</string>
     <key>CFBundleDisplayName</key>       <string>Omnimount</string>
     <key>CFBundleIdentifier</key>        <string>org.omnimount.app</string>
-    <key>CFBundleVersion</key>           <string>0.4.6</string>
-    <key>CFBundleShortVersionString</key><string>0.4.6</string>
+    <key>CFBundleVersion</key>           <string>0.4.8</string>
+    <key>CFBundleShortVersionString</key><string>0.4.8</string>
     <key>CFBundleExecutable</key>        <string>Omnimount</string>
     <key>CFBundleIconFile</key>          <string>AppIcon</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>

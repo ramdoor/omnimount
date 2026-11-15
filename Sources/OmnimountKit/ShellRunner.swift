@@ -4,8 +4,16 @@ public struct ShellResult {
     public let exitCode: Int32
     public let stdout: String
     public let stderr: String
+    public let terminatedBySignal: Bool
 
-    public var succeeded: Bool { exitCode == 0 }
+    public init(exitCode: Int32, stdout: String, stderr: String, terminatedBySignal: Bool = false) {
+        self.exitCode = exitCode
+        self.stdout = stdout
+        self.stderr = stderr
+        self.terminatedBySignal = terminatedBySignal
+    }
+
+    public var succeeded: Bool { !terminatedBySignal && exitCode == 0 }
 }
 
 public enum ShellError: Error, LocalizedError {
@@ -21,6 +29,25 @@ public enum ShellError: Error, LocalizedError {
 
 /// Ejecuta binarios externos de forma síncrona capturando stdout/stderr.
 public enum ShellRunner {
+    /// El lector de stderr escribe desde otra cola; el acceso a su resultado
+    /// está protegido también para las comprobaciones de concurrencia de Swift.
+    private final class OutputCapture: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storage = Data()
+
+        func store(_ data: Data) {
+            lock.lock()
+            defer { lock.unlock() }
+            storage = data
+        }
+
+        func snapshot() -> Data {
+            lock.lock()
+            defer { lock.unlock() }
+            return storage
+        }
+    }
+
     @discardableResult
     public static func run(_ executable: String, _ arguments: [String]) throws -> ShellResult {
         let process = Process()
@@ -38,15 +65,23 @@ public enum ShellRunner {
             throw ShellError.launchFailed(executable, underlying: error)
         }
 
-        // Leer en paralelo para no bloquear si un pipe se llena.
+        // Drenar ambos pipes a la vez: esperar al EOF de stdout antes de leer
+        // stderr puede bloquear al hijo cuando se llena el buffer de stderr.
+        let errCapture = OutputCapture()
+        let readers = DispatchGroup()
+        DispatchQueue.global(qos: .utility).async(group: readers) {
+            errCapture.store(errPipe.fileHandleForReading.readDataToEndOfFile())
+        }
         let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
+        readers.wait()
+        let errData = errCapture.snapshot()
 
         return ShellResult(
             exitCode: process.terminationStatus,
             stdout: String(data: outData, encoding: .utf8) ?? "",
-            stderr: String(data: errData, encoding: .utf8) ?? ""
+            stderr: String(data: errData, encoding: .utf8) ?? "",
+            terminatedBySignal: process.terminationReason == .uncaughtSignal
         )
     }
 

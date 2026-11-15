@@ -49,35 +49,92 @@ public enum Cloner {
         identifier.range(of: #"^disk\d+s\d+$"#, options: .regularExpression) != nil
     }
 
-    /// Desmonta el objetivo (partición o disco entero) antes del acceso en bruto.
-    /// Los montajes FUSE de Omnimount no aparecen en DiskArbitration, así que
-    /// `diskutil unmountDisk` no los toca: hay que localizarlos por mount(8)
-    /// y desmontarlos uno a uno antes.
-    private static func unmountTarget(_ identifier: String) throws {
-        if isPartition(identifier) {
-            if let fuseMount = Mounter.currentMountPoint(devicePath: "/dev/\(identifier)") {
-                try Mounter.unmount(mountPoint: fuseMount)
-            }
-            // Puede no estar montada; diskutil devuelve error inofensivo en ese caso.
-            _ = try? ShellRunner.run("/usr/sbin/diskutil", ["unmount", identifier])
-            return
+    /// Injectable operations keep raw-device preparation testable without disks.
+    struct UnmountOperations {
+        var externalDisks: () throws -> [ExternalDisk]
+        var currentMountPoint: (String) -> String?
+        var possibleFuseMountPoint: (DiskPartition) -> String?
+        var unmount: (String) throws -> Void
+        var runDiskutil: ([String]) throws -> ShellResult
+
+        static var system: Self {
+            Self(externalDisks: DiskLister.externalDisks,
+                 currentMountPoint: { Mounter.currentMountPoint(devicePath: $0) },
+                 possibleFuseMountPoint: { Mounter.derivedMountPoint(partition: $0) },
+                 unmount: { try Mounter.unmount(mountPoint: $0) },
+                 runDiskutil: { try ShellRunner.run("/usr/sbin/diskutil", $0) })
         }
-        if let disk = try? DiskLister.externalDisks().first(where: { $0.deviceIdentifier == identifier }) {
-            for partition in disk.partitions {
-                if let fuseMount = Mounter.currentMountPoint(devicePath: partition.devicePath) {
-                    try Mounter.unmount(mountPoint: fuseMount)
-                }
+    }
+
+    private static func targetPartitions(_ identifier: String,
+                                         in disks: [ExternalDisk]) throws -> [DiskPartition] {
+        let partitions = isPartition(identifier)
+            ? disks.flatMap(\.partitions).filter { $0.deviceIdentifier == identifier }
+            : disks.first { $0.deviceIdentifier == identifier }?.partitions ?? []
+        guard !partitions.isEmpty else {
+            throw CloneError.unmountFailed(L10n.t(
+                "No se encontró el objetivo externo \(identifier).",
+                "External target \(identifier) was not found."))
+        }
+        return partitions
+    }
+
+    /// Confirma el desmontaje antes del acceso en bruto. FUSE-T pierde la
+    /// asociación con /dev/disk…: una ruta derivada solo por etiqueta puede
+    /// corresponder a otro disco. En ese caso no desmontamos un volumen ajeno;
+    /// el usuario debe expulsarlo desde la app, que conserva su registro.
+    static func unmountTarget(_ identifier: String,
+                              operations: UnmountOperations = .system) throws {
+        let partitions = try targetPartitions(identifier, in: operations.externalDisks())
+        var knownMounts: Set<String> = []
+        for partition in partitions {
+            if let point = operations.currentMountPoint(partition.devicePath) ?? partition.mountPoint {
+                knownMounts.insert(point)
+            } else if let possible = operations.possibleFuseMountPoint(partition) {
+                throw CloneError.unmountFailed(L10n.t(
+                    "Posible montaje FUSE-T en \(possible). Expulsa el volumen desde Omnimount y vuelve a intentarlo; la etiqueta no identifica el disco de forma inequívoca.",
+                    "Possible FUSE-T mount at \(possible). Eject the volume in Omnimount and try again; its label does not uniquely identify the disk."))
             }
         }
-        let result = try ShellRunner.run("/usr/sbin/diskutil", ["unmountDisk", identifier])
-        guard result.succeeded else {
+        for point in knownMounts.sorted() {
+            try operations.unmount(point)
+        }
+        let command = isPartition(identifier) ? "unmount" : "unmountDisk"
+        let result = try operations.runDiskutil([command, identifier])
+        // diskutil returns 1 when a partition is already unmounted, including
+        // immediately after we unmounted its known mount point above. Accept
+        // only that exact diagnostic, then still verify the fresh mount state.
+        let alreadyUnmounted = isPartition(identifier)
+            && !result.terminatedBySignal && result.exitCode == 1
+            && result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                == "\(identifier) was already unmounted"
+        guard result.succeeded || alreadyUnmounted else {
             throw CloneError.unmountFailed(result.stderr.isEmpty ? result.stdout : result.stderr)
+        }
+        // No ignorar errores ni asumir que exit 0 prueba que FUSE-T se desmontó.
+        let refreshed = try targetPartitions(identifier, in: operations.externalDisks())
+        for partition in refreshed {
+            if let point = partition.mountPoint
+                ?? operations.currentMountPoint(partition.devicePath)
+                ?? operations.possibleFuseMountPoint(partition) {
+                throw CloneError.unmountFailed(L10n.t(
+                    "\(identifier) sigue montado o tiene un montaje FUSE-T sin identificar en \(point). Expúlsalo desde Omnimount y vuelve a intentarlo.",
+                    "\(identifier) is still mounted or has an unidentified FUSE-T mount at \(point). Eject it in Omnimount and try again."))
+            }
         }
     }
 
     private static func diskSize(_ identifier: String) throws -> Int64 {
-        let info = try DiskLister.info(for: identifier)
-        guard let size = (info["TotalSize"] as? NSNumber)?.int64Value ?? (info["Size"] as? NSNumber)?.int64Value,
+        try deviceSize(from: DiskLister.info(for: identifier), identifier: identifier)
+    }
+
+    static func deviceSize(from info: [String: Any], identifier: String) throws -> Int64 {
+        // TotalSize may describe the mounted filesystem, which can be smaller
+        // than its partition. Raw copies must include the entire device slice.
+        guard let size = (info["IOKitSize"] as? NSNumber)?.int64Value
+                ?? (info["Size"] as? NSNumber)?.int64Value
+                ?? (info["TotalSize"] as? NSNumber)?.int64Value,
               size > 0 else {
             throw CloneError.sizeUnknown(identifier)
         }
@@ -121,10 +178,7 @@ public enum Cloner {
                                progress: (CloneProgress) -> Void) throws {
         guard getuid() == 0 else { throw CloneError.notRoot }
 
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: imagePath),
-              let imageSize = (attrs[.size] as? NSNumber)?.int64Value else {
-            throw CloneError.cannotOpen(imagePath)
-        }
+        let imageSize = try restoreImageSize(at: imagePath)
         let targetSize = try diskSize(identifier)
         guard imageSize <= targetSize else {
             throw CloneError.imageLargerThanTarget(image: imageSize, target: targetSize)
@@ -146,26 +200,45 @@ public enum Cloner {
         try copyStream(from: input, to: output, totalBytes: imageSize, progress: progress)
     }
 
-    private static func copyStream(from input: FileHandle, to output: FileHandle,
-                                   totalBytes: Int64, progress: (CloneProgress) -> Void) throws {
+    /// Rechaza una imagen vacía antes de consultar o desmontar el destino.
+    static func restoreImageSize(at imagePath: String) throws -> Int64 {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: imagePath),
+              let imageSize = (attrs[.size] as? NSNumber)?.int64Value else {
+            throw CloneError.cannotOpen(imagePath)
+        }
+        guard imageSize > 0 else {
+            throw CloneError.ioError(L10n.t(
+                "La imagen está vacía; no se puede restaurar.",
+                "The image is empty and cannot be restored."))
+        }
+        return imageSize
+    }
+
+    static func copyStream(from input: FileHandle, to output: FileHandle,
+                           totalBytes: Int64, progress: (CloneProgress) -> Void) throws {
         var copied: Int64 = 0
         let start = Date()
         var lastReport = Date.distantPast
 
-        while true {
+        while copied < totalBytes {
             // autoreleasepool por iteración: sin él, los objetos Data/NSData
             // temporales del read/write se acumulan durante todo el copiado
             // (decenas de miles de iteraciones en un disco grande) y disparan
             // la presión de memoria de macOS ("Forzar salida de aplicaciones"),
             // que aborta el clon. Drenarlos cada vuelta mantiene la memoria plana.
-            let finished: Bool = try autoreleasepool {
+            try autoreleasepool {
                 let chunk: Data
                 do {
-                    chunk = try input.read(upToCount: chunkSize) ?? Data()
+                    let count = Int(min(Int64(chunkSize), totalBytes - copied))
+                    chunk = try input.read(upToCount: count) ?? Data()
                 } catch {
                     throw CloneError.ioError("lectura en offset \(copied): \(error.localizedDescription)")
                 }
-                if chunk.isEmpty { return true }
+                guard !chunk.isEmpty else {
+                    throw CloneError.ioError(L10n.t(
+                        "Fin de archivo inesperado: copiados \(copied) de \(totalBytes) bytes.",
+                        "Unexpected end of file: copied \(copied) of \(totalBytes) bytes."))
+                }
 
                 do {
                     try output.write(contentsOf: chunk)
@@ -184,9 +257,7 @@ public enum Cloner {
                     ))
                     lastReport = now
                 }
-                return false
             }
-            if finished { break }
         }
 
         try output.synchronize()
