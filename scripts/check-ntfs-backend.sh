@@ -1,26 +1,32 @@
 #!/bin/bash
 # Comprueba sin ejecutar/montar que los binarios NTFS usan el backend esperado.
 set -euo pipefail
+# shellcheck source=l10n.sh
+. "$(cd "$(dirname "$0")" && pwd)/l10n.sh"
 
-BIN_DIR="${1:?Uso: check-ntfs-backend.sh directorio-de-binarios}"
+if [ $# -lt 1 ] || [ -z "${1:-}" ]; then
+    terr sh.checkNtfs.usage
+    exit 1
+fi
+BIN_DIR=$1
 for tool in ntfs-3g mkntfs ntfsfix; do
     binary="$BIN_DIR/$tool"
     [ -f "$binary" ] || continue
     for arch in arm64 x86_64; do
         if ! lipo -verify_arch "$arch" "$binary"; then
-            echo "ERROR: $binary no contiene la arquitectura $arch." >&2
+            terr sh.checkNtfs.missingArch "$binary" "$arch"
             exit 1
         fi
         if ! dependencies="$(otool -arch "$arch" -L "$binary" 2>&1)"; then
-            echo "ERROR: $binary no contiene una arquitectura $arch válida." >&2
+            terr sh.checkNtfs.badArch "$binary" "$arch"
             exit 1
         fi
         if printf '%s\n' "$dependencies" | grep -Eq 'libfuse[.][^[:space:]]*|libosxfuse|macfuse'; then
-            echo "ERROR: $binary ($arch) enlaza macFUSE/libfuse, no FUSE-T. Ejecuta make ntfs3g y vuelve a empaquetar." >&2
+            terr sh.checkNtfs.linksMacfuse "$binary" "$arch"
             exit 1
         fi
         if [ "$tool" = ntfs-3g ] && ! printf '%s\n' "$dependencies" | grep -Fq 'libfuse-t.dylib'; then
-            echo "ERROR: $binary ($arch) no enlaza libfuse-t.dylib. Ejecuta make ntfs3g y vuelve a empaquetar." >&2
+            terr sh.checkNtfs.missingFuseT "$binary" "$arch"
             exit 1
         fi
         minimum="$(otool -arch "$arch" -l "$binary" | awk '
@@ -32,7 +38,7 @@ for tool in ntfs-3g mkntfs ntfsfix; do
             split(version, part, ".");
             exit !(part[1] < 13 || (part[1] == 13 && part[2] == 0 && part[3] == 0));
         }'; then
-            echo "ERROR: $binary ($arch) requiere macOS ${minimum:-desconocido}; Omnimount soporta 13+. Recompila con MACOSX_DEPLOYMENT_TARGET=13.0 make ntfs3g." >&2
+            terr sh.checkNtfs.oldMacOS "$binary" "$arch" "${minimum:-$(t sh.common.unknown)}"
             exit 1
         fi
     done

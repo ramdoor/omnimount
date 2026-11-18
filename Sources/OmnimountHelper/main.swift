@@ -19,7 +19,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
         guard let part = try DiskLister.externalDisks()
             .flatMap(\.partitions)
             .first(where: { $0.deviceIdentifier == id }) else {
-            throw MountError.unmountFailed(L10n.t("No existe la partición externa \(id)", "External partition \(id) does not exist"))
+            throw MountError.unmountFailed(L10n.t("error.helper.missingPartition", id))
         }
         return part
     }
@@ -59,7 +59,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
                 guard let current = part.mountPoint
                     ?? Mounter.currentMountPoint(devicePath: part.devicePath)
                     ?? Mounter.derivedMountPoint(partition: part) else {
-                    reply(false, L10n.t("\(target) no está montada.", "\(target) is not mounted."))
+                    reply(false, L10n.t("error.unmount.notMounted", target))
                     return
                 }
                 mountPoint = current
@@ -117,7 +117,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
             let part = try partition(for: deviceIdentifier)
             let detection = try FilesystemDetector.detect(devicePath: part.devicePath)
             guard detection.extQuotaEnabled else {
-                reply(true, L10n.t("La partición no tiene cuotas activadas.", "The partition has no quotas enabled."))
+                reply(true, L10n.t("error.helper.noQuota"))
                 return
             }
             try Mounter.disableExtQuota(devicePath: part.devicePath)
@@ -130,7 +130,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
     func format(deviceIdentifier: String, filesystem: String, label: String,
                 reply: @escaping (Bool, String) -> Void) {
         guard let target = TargetFormat(rawValue: filesystem) else {
-            reply(false, L10n.t("Formato desconocido: \(filesystem)", "Unknown format: \(filesystem)"))
+            reply(false, L10n.t("error.format.unknown", filesystem))
             return
         }
         do {
@@ -156,7 +156,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
     private static func friendlyMessage(_ error: Error) -> String {
         let message = error.localizedDescription
         if error is DetectionError {
-            return message + " " + L10n.t("Si el helper está activo, concede Acceso total al disco a OmnimountHelper en Ajustes → Privacidad y seguridad.", "If the helper is enabled, grant Full Disk Access to OmnimountHelper in System Settings → Privacy & Security.")
+            return message + " " + L10n.t("error.helper.fda")
         }
         return message
     }

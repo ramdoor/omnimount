@@ -42,7 +42,9 @@ final class MountController: ObservableObject {
         }
     }
 
-    private let prompt = "Omnimount necesita permisos de administrador para acceder al disco."
+    private var prompt: String {
+        L10n.t("app.alert.adminPrompt")
+    }
 
     private var cliPath: String? { ToolLocator.find(.omnimountCLI) }
 
@@ -74,17 +76,17 @@ final class MountController: ObservableObject {
     func cloneToImage(identifier: String, suggestedName: String, totalBytes: Int64,
                       completion: @escaping () -> Void) {
         guard helper.state == .enabled else {
-            lastMessage = L10n.t("Clonar desde la app requiere el helper activo. Alternativa: sudo omnimount clone \(identifier) imagen.img", "Cloning from the app requires the helper. Alternative: sudo omnimount clone \(identifier) image.img")
+            lastMessage = L10n.t("app.alert.cloneNeedsHelper", identifier)
             completion(); return
         }
         let panel = NSSavePanel()
         panel.nameFieldStringValue = suggestedName + ".img"
-        panel.title = L10n.t("Guardar imagen del disco", "Save disk image")
+        panel.title = L10n.t("app.alert.saveImage")
         panel.canCreateDirectories = true
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let url = panel.url else { completion(); return }
 
-        cloneLabel = L10n.t("Clonando \(identifier) → \(url.lastPathComponent)…", "Cloning \(identifier) → \(url.lastPathComponent)…")
+        cloneLabel = L10n.t("app.alert.cloning", identifier, url.lastPathComponent)
         cloneProgress = 0
         let path = url.path
         cloneTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -96,7 +98,7 @@ final class MountController: ObservableObject {
             guard let self else { return }
             self.cloneTimer?.invalidate(); self.cloneTimer = nil
             self.cloneLabel = nil; self.cloneProgress = nil
-            self.lastFormatSummary = ok ? L10n.t("Imagen guardada en \(message)", "Image saved to \(message)") : nil
+            self.lastFormatSummary = ok ? L10n.t("app.alert.imageSaved", message) : nil
             self.lastMessage = ok ? nil : message
             completion()
         }
@@ -105,30 +107,30 @@ final class MountController: ObservableObject {
     /// Restaura un .img sobre un disco o partición, con confirmación destructiva.
     func restoreImage(identifier: String, displayName: String, completion: @escaping () -> Void) {
         guard helper.state == .enabled else {
-            lastMessage = L10n.t("Restaurar desde la app requiere el helper activo. Alternativa: sudo omnimount restore imagen.img \(identifier)", "Restoring from the app requires the helper. Alternative: sudo omnimount restore image.img \(identifier)")
+            lastMessage = L10n.t("app.alert.restoreNeedsHelper", identifier)
             completion(); return
         }
         let panel = NSOpenPanel()
-        panel.title = L10n.t("Elegir imagen a restaurar", "Choose image to restore")
+        panel.title = L10n.t("app.alert.chooseImage")
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let url = panel.url else { completion(); return }
 
         let alert = NSAlert()
-        alert.messageText = L10n.t("¿Restaurar sobre \(displayName)?", "Restore over \(displayName)?")
-        alert.informativeText = L10n.t("Se sobrescribirá TODO el contenido de \(identifier) con \(url.lastPathComponent). Esta operación no se puede deshacer.", "ALL contents of \(identifier) will be overwritten with \(url.lastPathComponent). This cannot be undone.")
+        alert.messageText = L10n.t("app.alert.restoreTitle", displayName)
+        alert.informativeText = L10n.t("app.alert.restoreBody", identifier, url.lastPathComponent)
         alert.alertStyle = .critical
-        alert.addButton(withTitle: L10n.t("Restaurar", "Restore"))
-        alert.addButton(withTitle: L10n.t("Cancelar", "Cancel"))
+        alert.addButton(withTitle: L10n.t("app.common.restore"))
+        alert.addButton(withTitle: L10n.t("app.common.cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { completion(); return }
 
-        cloneLabel = L10n.t("Restaurando \(url.lastPathComponent) → \(identifier)…", "Restoring \(url.lastPathComponent) → \(identifier)…")
+        cloneLabel = L10n.t("app.alert.restoring", url.lastPathComponent, identifier)
         cloneProgress = nil
         helper.restore(imagePath: url.path, deviceIdentifier: identifier) { [weak self] ok, message in
             guard let self else { return }
             self.cloneLabel = nil
-            self.lastFormatSummary = ok ? L10n.t("Imagen restaurada en \(message)", "Image restored to \(message)") : nil
+            self.lastFormatSummary = ok ? L10n.t("app.alert.imageRestored", message) : nil
             self.lastMessage = ok ? nil : message
             completion()
         }
@@ -142,7 +144,7 @@ final class MountController: ObservableObject {
     func format(_ partition: DiskPartition, as filesystem: String, label: String,
                 completion: @escaping () -> Void) {
         guard helper.state == .enabled else {
-            lastMessage = L10n.t("Formatear desde la app requiere el helper activo. Alternativa: sudo omnimount format.", "Formatting from the app requires the helper. Alternative: sudo omnimount format.")
+            lastMessage = L10n.t("app.alert.formatNeedsHelper")
             completion()
             return
         }
@@ -213,21 +215,15 @@ final class MountController: ObservableObject {
     /// remove_hiberfile), tras confirmar con el usuario.
     func makeWritable(_ partition: DiskPartition, completion: @escaping () -> Void) {
         guard helper.state == .enabled else {
-            lastMessage = L10n.t(
-                "Hacerlo escribible requiere el helper activo.",
-                "Making it writable requires the helper enabled.")
+            lastMessage = L10n.t("app.alert.writableNeedsHelper")
             completion(); return
         }
         let alert = NSAlert()
-        alert.messageText = L10n.t(
-            "¿Hacer escribible \(partition.volumeName ?? partition.deviceIdentifier)?",
-            "Make \(partition.volumeName ?? partition.deviceIdentifier) writable?")
-        alert.informativeText = L10n.t(
-            "Windows dejó este disco NTFS en solo lectura (Inicio rápido/hibernación o desconexión sin expulsar). Se limpiará ese estado para poder escribir. Tus ficheros no se tocan; solo se descarta una sesión de Windows en suspensión, si la hubiera.",
-            "Windows left this NTFS disk read-only (Fast Startup/hibernation, or unplugged without ejecting). That state will be cleared so you can write. Your files are untouched; only a suspended Windows session, if any, is discarded.")
+        alert.messageText = L10n.t("app.alert.writableTitle", partition.volumeName ?? partition.deviceIdentifier)
+        alert.informativeText = L10n.t("app.alert.writableBody")
         alert.alertStyle = .warning
-        alert.addButton(withTitle: L10n.t("Hacer escribible", "Make writable"))
-        alert.addButton(withTitle: L10n.t("Cancelar", "Cancel"))
+        alert.addButton(withTitle: L10n.t("app.common.makeWritable"))
+        alert.addButton(withTitle: L10n.t("app.common.cancel"))
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn else { completion(); return }
 
@@ -246,9 +242,7 @@ final class MountController: ObservableObject {
                     if stillReadOnly {
                         // Siguió en solo lectura: el daño necesita chkdsk en Windows.
                         self.readOnlyPartitions.insert(partition.deviceIdentifier)
-                        self.lastMessage = L10n.t(
-                            "No se pudo hacer escribible; el disco necesita repararse en Windows (chkdsk).",
-                            "Could not make it writable; the disk needs repair on Windows (chkdsk).")
+                        self.lastMessage = L10n.t("app.alert.writableFailed")
                     }
                 }
             } else {
@@ -262,9 +256,7 @@ final class MountController: ObservableObject {
     func fixQuotaAndMount(_ partition: DiskPartition, completion: @escaping () -> Void) {
         quotaFixTarget = nil
         guard helper.state == .enabled else {
-            lastMessage = L10n.t(
-                "Para el arreglo con un clic activa el helper; o ejecuta: sudo omnimount mount \(partition.deviceIdentifier) --fix-quota",
-                "One-click fix needs the helper enabled; or run: sudo omnimount mount \(partition.deviceIdentifier) --fix-quota")
+            lastMessage = L10n.t("app.alert.quotaNeedsHelper", partition.deviceIdentifier)
             completion()
             return
         }
@@ -285,7 +277,7 @@ final class MountController: ObservableObject {
     private func runPrivileged(partition: DiskPartition, verb: String,
                                completion: @escaping () -> Void) {
         guard let cli = cliPath else {
-            lastMessage = L10n.t("No se encontró el CLI `omnimount`. Instálalo con `make install` (ver README).", "The `omnimount` CLI was not found. Install it with `make install` (see README).")
+            lastMessage = L10n.t("app.alert.cliMissing")
             return
         }
         busyPartitions.insert(partition.deviceIdentifier)
@@ -352,9 +344,9 @@ enum MenuTextSize: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .normal: return L10n.t("Normal", "Normal")
-        case .grande: return L10n.t("Grande", "Large")
-        case .muyGrande: return L10n.t("Muy grande", "Extra large")
+        case .normal: return L10n.t("app.textSize.normal")
+        case .grande: return L10n.t("app.textSize.large")
+        case .muyGrande: return L10n.t("app.textSize.extraLarge")
         }
     }
     var dynamicTypeSize: DynamicTypeSize {

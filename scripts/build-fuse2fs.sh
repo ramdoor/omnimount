@@ -12,6 +12,8 @@
 #   macfuse               — el clásico con kext (API fuse3).
 #                           Requiere: brew install --cask macfuse
 set -euo pipefail
+# shellcheck source=l10n.sh
+. "$(cd "$(dirname "$0")" && pwd)/l10n.sh"
 
 E2FSPROGS_VERSION="${E2FSPROGS_VERSION:-1.47.3}"
 BACKEND="${BACKEND:-fuse-t}"
@@ -23,29 +25,29 @@ export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.0}"
 case "$BACKEND" in
 fuse-t)
     if [ ! -f /usr/local/lib/libfuse-t.dylib ]; then
-        echo "ERROR: FUSE-T no está instalado." >&2
-        echo "  brew install --cask macos-fuse-t/cask/fuse-t" >&2
+        terr sh.common.noFuseT
+        terr sh.common.installFuseT
         exit 1
     fi
     ;;
 macfuse)
     if [ ! -d /Library/Filesystems/macfuse.fs ]; then
-        echo "ERROR: macFUSE no está instalado." >&2
-        echo "  brew install --cask macfuse (y aprueba la extensión en Ajustes del Sistema)" >&2
+        terr sh.buildFuse.noMacFuse
+        terr sh.buildFuse.installMacFuse
         exit 1
     fi
     if [ ! -f /usr/local/lib/pkgconfig/fuse3.pc ]; then
-        echo "ERROR: no se encuentra fuse3.pc (¿instalación de macFUSE incompleta?)" >&2
+        terr sh.buildFuse.noFuse3
         exit 1
     fi
     ;;
 *)
-    echo "BACKEND desconocido: $BACKEND (usa fuse-t o macfuse)" >&2
+    terr sh.buildFuse.badBackend "$BACKEND"
     exit 1
     ;;
 esac
 
-echo "==> Backend: $BACKEND"
+t sh.buildFuse.backend "$BACKEND"
 mkdir -p "$BUILD_DIR"
 BUILD_DIR="$(cd "$BUILD_DIR" && pwd)"
 cd "$BUILD_DIR"
@@ -56,7 +58,7 @@ if [ -n "${E2FSPROGS_SOURCE_DIR:-}" ]; then
     rm -rf "e2fsprogs-$E2FSPROGS_VERSION"
     mv "e2fsprogs-$E2FSPROGS_VERSION.source-copy" "e2fsprogs-$E2FSPROGS_VERSION"
 else
-    echo "==> Descargando e2fsprogs $E2FSPROGS_VERSION"
+    t sh.buildFuse.downloading "$E2FSPROGS_VERSION"
     TARBALL="e2fsprogs-$E2FSPROGS_VERSION.tar.xz"
     if [ ! -f "$TARBALL" ]; then
         curl -fL -o "$TARBALL" \
@@ -67,14 +69,19 @@ else
 fi
 cd "e2fsprogs-$E2FSPROGS_VERSION"
 
-echo "==> Aplicando parche Darwin (la API xattr de macOS lleva un parámetro 'position')"
+t sh.buildFuse.darwinPatch
+export OM_PATCH_ALREADY OM_PATCH_APPLIED OM_MISSING_FS_OPS
+OM_PATCH_ALREADY=$(t sh.buildFuse.patchAlready)
+OM_PATCH_APPLIED=$(t sh.buildFuse.patchApplied)
+OM_MISSING_FS_OPS=$(t sh.buildFuse.missingFsOps)
 python3 - misc/fuse2fs.c <<'PY'
+import os
 import sys
 
 path = sys.argv[1]
 src = open(path).read()
 if "op_setxattr_darwin" in src:
-    print("   (ya aplicado)")
+    print(os.environ["OM_PATCH_ALREADY"])
     sys.exit(0)
 
 wrappers = """
@@ -102,7 +109,7 @@ static int op_getxattr_darwin(const char *path, const char *key, char *value,
 
 """
 anchor = "static struct fuse_operations fs_ops = {"
-assert anchor in src, "no se encontró fs_ops en fuse2fs.c"
+assert anchor in src, os.environ["OM_MISSING_FS_OPS"]
 src = src.replace(anchor, wrappers + anchor)
 src = src.replace(".setxattr = op_setxattr,", """#if FUSE_VERSION < FUSE_MAKE_VERSION(3, 0)
 	.setxattr = op_setxattr_darwin,
@@ -115,11 +122,16 @@ src = src.replace(".getxattr = op_getxattr,", """#if FUSE_VERSION < FUSE_MAKE_VE
 	.getxattr = op_getxattr,
 #endif""")
 open(path, "w").write(src)
-print("   parche aplicado")
+print(os.environ["OM_PATCH_APPLIED"])
 PY
 
-echo "==> Aplicando parche de solo lectura (sin escrituras de metadatos ni journal)"
+t sh.buildFuse.readOnlyPatch
+export OM_PATCH_ALREADY OM_PATCH_APPLIED OM_MISSING_ANCHOR
+OM_PATCH_ALREADY=$(t sh.buildFuse.patchAlready)
+OM_PATCH_APPLIED=$(t sh.buildFuse.patchApplied)
+OM_MISSING_ANCHOR=$(t sh.buildFuse.missingAnchor)
 python3 - misc/fuse2fs.c <<'PY'
+import os
 import pathlib
 import sys
 
@@ -128,7 +140,7 @@ src = path.read_text()
 marker = "/* Omnimount: read-only means no writes to the backing device. */"
 anchor = "\tfuse_opt_parse(&args, &fctx, fuse2fs_opts, fuse2fs_opt_proc);"
 if marker not in src:
-    assert src.count(anchor) == 1, "no se encontró un punto único de parseo de opciones"
+    assert src.count(anchor) == 1, os.environ["OM_MISSING_ANCHOR"]
     src = src.replace(anchor, anchor + """
 
 	/* Omnimount: read-only means no writes to the backing device. */
@@ -139,9 +151,9 @@ if marker not in src:
 	}
 """)
     path.write_text(src)
-    print("   parche aplicado")
+    print(os.environ["OM_PATCH_APPLIED"])
 else:
-    print("   (ya aplicado)")
+    print(os.environ["OM_PATCH_ALREADY"])
 PY
 
 # --- Build universal: una pasada por arquitectura y lipo al final ---
@@ -174,9 +186,9 @@ build_one() {
     cd ..
 }
 
-echo "==> Compilando arm64"
+t sh.common.compilingArch arm64
 build_one arm64
-echo "==> Compilando x86_64 (configure corre sus tests bajo Rosetta)"
+t sh.buildFuse.compilingIntel
 build_one x86_64
 
 STAGED_BIN="$BUILD_DIR/universal-bin"
@@ -195,7 +207,7 @@ for pair in fuse2fs:misc/fuse2fs e2fsck:e2fsck/e2fsck mke2fs:misc/mke2fs tune2fs
             split(version, part, ".");
             exit !(part[1] < 13 || (part[1] == 13 && part[2] == 0 && part[3] == 0));
         }'; then
-            echo "ERROR: $name ($ARCH) requiere macOS ${minimum:-desconocido}; recompila con MACOSX_DEPLOYMENT_TARGET=13.0." >&2
+            terr sh.buildFuse.oldMacOS "$name" "$ARCH" "${minimum:-$(t sh.common.unknown)}"
             exit 1
         fi
     done
@@ -205,7 +217,7 @@ if [ "$BACKEND" = fuse-t ]; then
         dependencies="$(otool -arch "$ARCH" -L "$STAGED_BIN/fuse2fs")"
         if ! printf '%s\n' "$dependencies" | grep -Fq 'libfuse-t.dylib' || \
             printf '%s\n' "$dependencies" | grep -Eq 'libfuse[.][^[:space:]]*|libosxfuse|macfuse'; then
-            echo "ERROR: fuse2fs ($ARCH) no está enlazado exclusivamente contra FUSE-T." >&2
+            terr sh.buildFuse.notFuseT "$ARCH"
             exit 1
         fi
     done
@@ -214,6 +226,6 @@ mkdir -p "$VENDOR_BIN"
 for name in fuse2fs e2fsck mke2fs tune2fs; do cp "$STAGED_BIN/$name" "$VENDOR_BIN/$name"; done
 
 echo ""
-echo "==> Binarios universales en $VENDOR_BIN:"
-for t in fuse2fs e2fsck mke2fs tune2fs; do lipo -info "$VENDOR_BIN/$t"; done
+t sh.common.universalBinaries "$VENDOR_BIN"
+for tool in fuse2fs e2fsck mke2fs tune2fs; do lipo -info "$VENDOR_BIN/$tool"; done
 "$VENDOR_BIN/fuse2fs" --version 2>&1 | head -2 || true

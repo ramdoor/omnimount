@@ -1,6 +1,8 @@
 #!/bin/bash
 # Empaqueta OmnimountApp como bundle Omnimount.app (con helper SMAppService).
 set -euo pipefail
+# shellcheck source=l10n.sh
+. "$(cd "$(dirname "$0")" && pwd)/l10n.sh"
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_DIR"
@@ -12,13 +14,13 @@ bash "$REPO_DIR/scripts/check-ntfs-backend.sh" "$REPO_DIR/vendor/bin"
 # sincronizada (OneDrive/Dropbox), .build/ la satura y bloquea ficheros.
 SCRATCH="${OMNIMOUNT_SCRATCH:-$HOME/.omnimount-build}"
 
-echo "==> Compilando en modo release"
+t sh.makeApp.building
 swift build -c release --arch arm64 --arch x86_64 --scratch-path "$SCRATCH"
 # SwiftPM cambió la ruta de productos universales entre motores de compilación.
 # Consultar la misma configuración evita depender de apple/ u out/.
 RELEASE_DIR="$(swift build -c release --arch arm64 --arch x86_64 --scratch-path "$SCRATCH" --show-bin-path)"
 for product in OmnimountApp OmnimountHelper omnimount; do
-    [ -x "$RELEASE_DIR/$product" ] || { echo "ERROR: no existe el producto compilado $RELEASE_DIR/$product" >&2; exit 1; }
+    [ -x "$RELEASE_DIR/$product" ] || { terr sh.makeApp.missingProduct "$RELEASE_DIR/$product"; exit 1; }
     for arch in arm64 x86_64; do
         lipo -verify_arch "$arch" "$RELEASE_DIR/$product"
     done
@@ -68,6 +70,12 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleExecutable</key>        <string>Omnimount</string>
     <key>CFBundleIconFile</key>          <string>AppIcon</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>
+    <key>CFBundleDevelopmentRegion</key> <string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>en</string>
+        <string>es</string>
+    </array>
     <key>LSMinimumSystemVersion</key>    <string>13.0</string>
     <key>LSUIElement</key>               <true/>
     <key>NSHumanReadableCopyright</key>  <string>GPL-3.0-or-later</string>
@@ -86,7 +94,7 @@ cp "$RELEASE_DIR/omnimount" "$APP/Contents/MacOS/omnimount-cli"
 if [ -f "$REPO_DIR/vendor/bin/fuse2fs" ]; then
     cp "$REPO_DIR/vendor/bin/fuse2fs" "$APP/Contents/MacOS/fuse2fs"
 else
-    echo "AVISO: vendor/bin/fuse2fs no existe (ejecuta 'make fuse2fs'); el bundle no incluirá fuse2fs."
+    t sh.makeApp.missingFuse2fs
 fi
 
 # Resto de herramientas autocontenidas (0.4.6): NTFS compilado contra FUSE-T
@@ -96,7 +104,7 @@ for tool in ntfs-3g mkntfs ntfsfix e2fsck mke2fs tune2fs; do
     if [ -f "$REPO_DIR/vendor/bin/$tool" ]; then
         cp "$REPO_DIR/vendor/bin/$tool" "$APP/Contents/MacOS/$tool"
     else
-        echo "AVISO: vendor/bin/$tool no existe (scripts/build-ntfs3g.sh / build-fuse2fs.sh)"
+        t sh.makeApp.missingTool "$tool"
     fi
 done
 for name in mkfs.ext2 mkfs.ext3 mkfs.ext4; do
@@ -119,11 +127,11 @@ DEVID="$(security find-identity -v -p codesigning 2>/dev/null | grep "Developer 
 if [ -n "$DEVID" ]; then
     SIGN_ID="$DEVID"
     RUNTIME_FLAGS="--options runtime --timestamp"
-    echo "==> Firmando para distribución: $SIGN_ID"
+    t sh.makeApp.signingDist "$SIGN_ID"
 else
     SIGN_ID="$(security find-identity -v -p codesigning 2>/dev/null | awk -F '"' 'NR==1 {print $2}')"
     RUNTIME_FLAGS=""
-    echo "==> Firma de desarrollo: ${SIGN_ID:-ad-hoc}"
+    t sh.makeApp.signingDev "${SIGN_ID:-ad-hoc}"
 fi
 
 ENTITLEMENTS="$REPO_DIR/scripts/tools.entitlements"
@@ -146,5 +154,5 @@ for tool in mkntfs ntfsfix e2fsck mke2fs tune2fs mkfs.ext2 mkfs.ext3 mkfs.ext4; 
 done
 codesign --force $RUNTIME_FLAGS --sign "${SIGN_ID:--}" "$APP"
 echo ""
-echo "==> Creado $APP"
-echo "Ábrela con: open \"$APP\""
+t sh.makeApp.created "$APP"
+t sh.makeApp.openHint "$APP"

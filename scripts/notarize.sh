@@ -14,33 +14,42 @@
 #
 # Uso: ./scripts/notarize.sh dist/Omnimount-0.1.0.pkg
 set -euo pipefail
+# shellcheck source=l10n.sh
+. "$(cd "$(dirname "$0")" && pwd)/l10n.sh"
 
-PKG="${1:?Uso: notarize.sh <ruta.pkg>}"
+if [ $# -lt 1 ] || [ -z "${1:-}" ]; then
+    terr sh.notarize.usage
+    exit 1
+fi
+PKG=$1
 PROFILE="${NOTARY_PROFILE:-omnimount-notary}"
 
 SIGNATURE="$(pkgutil --check-signature "$PKG")"
 case "$SIGNATURE" in
     *"Developer ID Installer:"*) ;;
-    *) echo "ERROR: el pkg no tiene una firma Developer ID Installer válida." >&2; exit 1 ;;
+    *) terr sh.notarize.badSignature; exit 1 ;;
 esac
 
-echo "==> Enviando a notarización (perfil: $PROFILE)"
+t sh.notarize.submitting "$PROFILE"
 RESULT="${PKG%.pkg}.notary.json"
 xcrun notarytool submit "$PKG" --keychain-profile "$PROFILE" --wait --output-format json > "$RESULT"
+export OM_NOTARY_REJECTED
+OM_NOTARY_REJECTED=$(t sh.notarize.rejected "$RESULT")
 SUBMISSION_ID="$(python3 - "$RESULT" <<'PY'
 import json
+import os
 import sys
 with open(sys.argv[1]) as response:
     result = json.load(response)
 if result.get("status") != "Accepted" or not result.get("id"):
-    raise SystemExit("ERROR: notarización no aceptada; revisa " + sys.argv[1])
+    raise SystemExit(os.environ["OM_NOTARY_REJECTED"])
 print(result["id"])
 PY
 )"
 xcrun notarytool log "$SUBMISSION_ID" --keychain-profile "$PROFILE" "${PKG%.pkg}.notary-log.json"
 
-echo "==> Grapando el ticket al pkg"
+t sh.notarize.stapling
 xcrun stapler staple "$PKG"
 xcrun stapler validate "$PKG"
 
-echo "==> Listo: $PKG notarizado y grapado. Se puede distribuir."
+t sh.notarize.done "$PKG"

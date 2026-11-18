@@ -28,7 +28,7 @@ final class HelperClient: ObservableObject {
 
     func refreshState() {
         guard #available(macOS 13.0, *) else {
-            state = .unavailable(L10n.t("requiere macOS 13 o posterior", "requires macOS 13 or later"))
+            state = .unavailable(L10n.t("error.helper.needsMacOS13"))
             return
         }
         switch service.status {
@@ -104,14 +104,14 @@ final class HelperClient: ObservableObject {
         }
 
         guard let proxy = connection.remoteObjectProxyWithErrorHandler({ error in
-            finish(false, L10n.t("El helper no responde: \(error.localizedDescription)", "The helper is not responding: \(error.localizedDescription)"))
+            finish(false, L10n.t("error.helper.notResponding", error.localizedDescription))
         }) as? OmnimountHelperProtocol else {
-            finish(false, L10n.t("No se pudo crear el proxy XPC.", "Could not create the XPC proxy."))
+            finish(false, L10n.t("error.helper.noProxy"))
             return
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
-            finish(false, L10n.t("El helper no respondió a tiempo.", "The helper did not respond in time."))
+            finish(false, L10n.t("error.helper.timeout"))
         }
         body(proxy) { ok, message in finish(ok, message) }
     }
