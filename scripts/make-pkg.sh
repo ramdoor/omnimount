@@ -9,6 +9,8 @@
 # Para distribuir fuera de tu Mac necesitas firma "Developer ID Installer"
 # y notarización (ver scripts/notarize.sh).
 set -euo pipefail
+# shellcheck source=l10n.sh
+. "$(cd "$(dirname "$0")" && pwd)/l10n.sh"
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_DIR"
@@ -17,7 +19,7 @@ VERSION="0.4.8"
 APP="$REPO_DIR/dist/Omnimount.app"
 PKG="$REPO_DIR/dist/Omnimount-$VERSION.pkg"
 
-[ -d "$APP" ] || { echo "No existe dist/Omnimount.app — ejecuta antes: make app"; exit 1; }
+[ -d "$APP" ] || { terr sh.makePkg.missingApp; exit 1; }
 
 STAGING="$(mktemp -d)"
 trap 'rm -rf "$STAGING"' EXIT
@@ -56,10 +58,10 @@ ARGS=(
 )
 if [ -n "$INSTALLER_ID" ]; then
     pkgbuild "${ARGS[@]}" --sign "$INSTALLER_ID" "$PKG"
-    echo "==> Firmado con: $INSTALLER_ID"
+    t sh.makePkg.signed "$INSTALLER_ID"
 else
     pkgbuild "${ARGS[@]}" "$PKG"
-    echo "AVISO: sin identidad 'Developer ID Installer' — pkg SIN firmar (válido solo para pruebas locales)."
+    t sh.makePkg.unsigned
 fi
 
-echo "==> Creado $PKG"
+t sh.makePkg.created "$PKG"

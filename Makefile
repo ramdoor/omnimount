@@ -27,21 +27,19 @@ install-cli:
 	swift build -c release --scratch-path $(SCRATCH)
 	install -m 755 $(SCRATCH)/release/omnimount $(PREFIX)/bin/omnimount
 	codesign --force --sign "$(SIGN_ID)" $(PREFIX)/bin/omnimount
-	@echo "CLI instalado en $(PREFIX)/bin/omnimount (firmado: $(SIGN_ID))"
+	@bash -c '. scripts/l10n.sh; t sh.make.cliInstalled "$$1" "$$2"' _ "$(PREFIX)/bin/omnimount" "$(SIGN_ID)"
 
 install: install-cli app
 	rm -rf /Applications/Omnimount.app
 	cp -R dist/Omnimount.app /Applications/
-	@echo "App instalada en /Applications/Omnimount.app"
-	@echo "Recuerda: si el helper estaba activo, reinícialo:"
-	@echo "  sudo launchctl kickstart -k system/org.omnimount.helper"
+	@bash -c '. scripts/l10n.sh; t sh.make.appInstalled; t sh.make.restartHelper; t sh.make.restartCommand'
 
 ntfs3g:
 	./scripts/build-ntfs3g.sh
 
 fuse2fs:
 	./scripts/build-fuse2fs.sh
-	@if [ -f vendor/bin/fuse2fs ]; then install -m 755 vendor/bin/fuse2fs $(PREFIX)/sbin/fuse2fs 2>/dev/null && echo "fuse2fs instalado en $(PREFIX)/sbin/fuse2fs" || true; fi
+	@if [ -f vendor/bin/fuse2fs ]; then install -m 755 vendor/bin/fuse2fs $(PREFIX)/sbin/fuse2fs 2>/dev/null && bash -c '. scripts/l10n.sh; t sh.make.fuse2fsInstalled "$$1"' _ "$(PREFIX)/sbin/fuse2fs" || true; fi
 
 clean:
 	swift package clean --scratch-path $(SCRATCH) 2>/dev/null || true

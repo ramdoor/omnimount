@@ -11,12 +11,12 @@ public enum TargetFormat: String, CaseIterable, Sendable, Identifiable {
 
     public var displayName: String {
         switch self {
-        case .ext4: return L10n.t("ext4 (Linux/consolas retro)", "ext4 (Linux/retro consoles)")
+        case .ext4: return L10n.t("disk.fs.ext4")
         case .ext3: return "ext3"
         case .ext2: return "ext2"
         case .ntfs: return "NTFS (Windows)"
-        case .fat32: return L10n.t("FAT32 (compatible con todo, ficheros <4 GB)", "FAT32 (works everywhere, files <4 GB)")
-        case .exfat: return L10n.t("exFAT (compatible, sin límite de 4 GB)", "exFAT (compatible, no 4 GB limit)")
+        case .fat32: return L10n.t("disk.fs.fat32")
+        case .exfat: return L10n.t("disk.fs.exfat")
         }
     }
 
@@ -40,15 +40,15 @@ public enum FormatError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .notRoot:
-            return L10n.t("Formatear requiere privilegios de root.", "Formatting requires root privileges.")
+            return L10n.t("error.format.notRoot")
         case .toolMissing(let tool):
-            return L10n.t("No se encontró \(tool). Revisa `omnimount doctor`.", "\(tool) not found. Check `omnimount doctor`.")
+            return L10n.t("error.format.toolMissing", tool)
         case .unmountFailed(let message):
-            return L10n.t("No se pudo desmontar antes de formatear: \(message)", "Could not unmount before formatting: \(message)")
+            return L10n.t("error.format.unmount", message)
         case .formatFailed(let tool, let output):
-            return L10n.t("\(tool) falló: \(output)", "\(tool) failed: \(output)")
+            return L10n.t("error.format.failed", tool, output)
         case .badLabel(let reason):
-            return L10n.t("Etiqueta no válida: \(reason)", "Invalid label: \(reason)")
+            return L10n.t("error.format.label", reason)
         }
     }
 }
@@ -60,20 +60,20 @@ public enum Formatter {
     /// Valida y normaliza la etiqueta para el formato elegido.
     public static func normalizeLabel(_ label: String, for format: TargetFormat) throws -> String {
         let trimmed = label.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { throw FormatError.badLabel("vacía") }
+        guard !trimmed.isEmpty else { throw FormatError.badLabel(L10n.t("error.format.empty")) }
         guard !trimmed.contains("/"), !trimmed.contains("\0") else {
-            throw FormatError.badLabel("no puede contener '/'")
+            throw FormatError.badLabel(L10n.t("error.format.slash"))
         }
         switch format {
         case .ext2, .ext3, .ext4:
-            guard trimmed.utf8.count <= 16 else { throw FormatError.badLabel("máximo 16 bytes en ext*") }
+            guard trimmed.utf8.count <= 16 else { throw FormatError.badLabel(L10n.t("error.format.extLength")) }
             return trimmed
         case .ntfs, .exfat:
             return trimmed
         case .fat32:
             // FAT: 11 caracteres, mayúsculas.
             let upper = trimmed.uppercased()
-            guard upper.count <= 11 else { throw FormatError.badLabel("máximo 11 caracteres en FAT32") }
+            guard upper.count <= 11 else { throw FormatError.badLabel(L10n.t("error.format.fatLength")) }
             return upper
         }
     }
@@ -94,7 +94,7 @@ public enum Formatter {
         _ = try? ShellRunner.run("/usr/sbin/diskutil", ["unmount", partition.deviceIdentifier])
         if let stillMounted = try? DiskLister.info(for: partition.deviceIdentifier),
            stillMounted["MountPoint"] is String {
-            throw FormatError.unmountFailed("\(partition.deviceIdentifier) sigue montada")
+            throw FormatError.unmountFailed(L10n.t("error.format.stillMounted", partition.deviceIdentifier))
         }
 
         let toolName: ExternalTool
@@ -127,10 +127,10 @@ public enum Formatter {
         // Alinear el tipo MBR con el nuevo FS (solo discos FDisk, slices 1-4).
         var mbrNote = ""
         if updateMBRTypeIfPossible(partition: partition, type: target.mbrType) {
-            mbrNote = String(format: ", tipo MBR 0x%02X", target.mbrType)
+            mbrNote = L10n.t("error.format.mbrType", String(format: "0x%02X", UInt(target.mbrType)))
         }
 
-        return "\(partition.deviceIdentifier) formateada como \(target.rawValue) «\(cleanLabel)»\(mbrNote)"
+        return L10n.t("error.format.summary", partition.deviceIdentifier, target.rawValue, cleanLabel, mbrNote)
     }
 
     /// Pone el byte de tipo en la entrada MBR de la partición. Devuelve true

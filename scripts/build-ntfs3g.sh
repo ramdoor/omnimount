@@ -11,6 +11,8 @@
 # NTFS3G_SOURCE_DIR reutiliza fuentes ya extraídas; NTFS3G_BUILD_DIR y
 # NTFS3G_OUTPUT_DIR permiten validar una compilación sin sustituir vendor/bin.
 set -euo pipefail
+# shellcheck source=l10n.sh
+. "$(cd "$(dirname "$0")" && pwd)/l10n.sh"
 
 NTFS3G_VERSION="${NTFS3G_VERSION:-2026.7.7}"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,8 +20,8 @@ VENDOR_BIN="${NTFS3G_OUTPUT_DIR:-$REPO_DIR/vendor/bin}"
 BUILD_DIR="${NTFS3G_BUILD_DIR:-${TMPDIR:-/tmp}/omnimount-ntfs3g-build}"
 
 if [ ! -f /usr/local/lib/libfuse-t.dylib ]; then
-    echo "ERROR: FUSE-T no está instalado." >&2
-    echo "  brew install --cask macos-fuse-t/cask/fuse-t" >&2
+    terr sh.common.noFuseT
+    terr sh.common.installFuseT
     exit 1
 fi
 
@@ -28,7 +30,7 @@ BUILD_DIR="$(cd "$BUILD_DIR" && pwd)"
 if [ -n "${NTFS3G_SOURCE_DIR:-}" ]; then
     SRC="$(cd "$NTFS3G_SOURCE_DIR" && pwd)"
 else
-    echo "==> Descargando ntfs-3g $NTFS3G_VERSION"
+    t sh.buildNtfs.downloading "$NTFS3G_VERSION"
     TARBALL="$BUILD_DIR/ntfs-3g_ntfsprogs-$NTFS3G_VERSION.tgz"
     if [ ! -f "$TARBALL" ]; then
         curl -fL -o "$TARBALL" "https://tuxera.com/opensource/$(basename "$TARBALL")"
@@ -37,7 +39,7 @@ else
     rm -rf "$SRC"
     tar xf "$TARBALL" -C "$BUILD_DIR"
 fi
-[ -f "$SRC/configure" ] || { echo "ERROR: fuente ntfs-3g sin configure: $SRC" >&2; exit 1; }
+[ -f "$SRC/configure" ] || { terr sh.buildNtfs.noConfigure "$SRC"; exit 1; }
 
 # configure consulta normalmente el módulo "fuse". Estas dos variables son
 # sus overrides oficiales y evitan esa selección ambigua sin tocar /usr/local.
@@ -48,7 +50,7 @@ export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.0}"
 
 # --- Build universal: árbol limpio por arquitectura y lipo al final ---
 for ARCH in arm64 x86_64; do
-    echo "==> Compilando $ARCH"
+    t sh.common.compilingArch "$ARCH"
     ARCH_DIR="$BUILD_DIR/ntfs-3g-$NTFS3G_VERSION-$ARCH"
     rm -rf "$ARCH_DIR"
     cp -R "$SRC" "$ARCH_DIR"
@@ -78,5 +80,5 @@ mkdir -p "$VENDOR_BIN"
 for name in ntfs-3g mkntfs ntfsfix; do cp "$STAGED_BIN/$name" "$VENDOR_BIN/$name"; done
 
 echo ""
-echo "==> Binarios universales en $VENDOR_BIN:"
-for t in ntfs-3g mkntfs ntfsfix; do lipo -info "$VENDOR_BIN/$t"; done
+t sh.common.universalBinaries "$VENDOR_BIN"
+for tool in ntfs-3g mkntfs ntfsfix; do lipo -info "$VENDOR_BIN/$tool"; done
