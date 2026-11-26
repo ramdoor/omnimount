@@ -24,7 +24,7 @@ public enum L10n {
         if let env = getenv("OMNIMOUNT_LANG") {
             let raw = String(cString: env).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             if !raw.isEmpty {
-                return raw.hasPrefix("es")
+                return raw == "es" || raw.hasPrefix("es-") || raw.hasPrefix("es_")
             }
         }
         return Locale.preferredLanguages.first?.lowercased().hasPrefix("es") ?? false

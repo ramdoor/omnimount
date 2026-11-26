@@ -11,12 +11,12 @@ om_preferred_language() {
     fi
     local raw=""
     if [ -n "${OMNIMOUNT_LANG+x}" ] && [ -n "$OMNIMOUNT_LANG" ]; then
-        raw=$(printf '%s' "$OMNIMOUNT_LANG" | tr '[:upper:]' '[:lower:]')
+        raw=$(printf '%s' "$OMNIMOUNT_LANG" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
     else
         raw=$(defaults read -g AppleLanguages 2>/dev/null | awk -F'"' '/"/ { print $2; exit }' | tr '[:upper:]' '[:lower:]' || true)
     fi
     case "$raw" in
-        es*) OM_LANG_CACHED=es ;;
+        es|es-*|es_*) OM_LANG_CACHED=es ;;
         *) OM_LANG_CACHED=en ;;
     esac
     printf '%s' "$OM_LANG_CACHED"
@@ -182,5 +182,13 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     # would store. Recompute it for real.
     unset OM_LANG_CACHED
     [ "$(om_preferred_language)" = "en" ]
+    for override in es-ES es_MX " ES "; do
+        OMNIMOUNT_LANG=$override
+        unset OM_LANG_CACHED
+        [ "$(t sh.common.unknown)" = "desconocido" ]
+    done
+    OMNIMOUNT_LANG=esperanto
+    unset OM_LANG_CACHED
+    [ "$(t sh.common.unknown)" = "unknown" ]
     echo "l10n ok"
 fi

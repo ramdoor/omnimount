@@ -5,8 +5,16 @@ import XCTest
 /// número de `%@` en inglés y en español. `OMNIMOUNT_LANG` fuerza el idioma.
 final class L10nTests: XCTestCase {
 
+    private var originalOverride: String?
+
+    override func setUp() {
+        super.setUp()
+        originalOverride = ProcessInfo.processInfo.environment["OMNIMOUNT_LANG"]
+    }
+
     override func tearDown() {
-        unsetenv("OMNIMOUNT_LANG")
+        if let originalOverride { setenv("OMNIMOUNT_LANG", originalOverride, 1) }
+        else { unsetenv("OMNIMOUNT_LANG") }
         super.tearDown()
     }
 
@@ -24,6 +32,13 @@ final class L10nTests: XCTestCase {
         XCTAssertEqual(L10n.t("error.mount.unmount", "busy"), "No se pudo desmontar: busy")
         XCTAssertEqual(L10n.t("retro.pi.name"), "Raspberry Pi (genérico)")
         XCTAssertEqual(L10n.t("missing.key.example"), "missing.key.example")
+
+        for value in ["es-ES", "es_MX", " ES "] {
+            setenv("OMNIMOUNT_LANG", value, 1)
+            XCTAssertEqual(L10n.t("app.common.cancel"), "Cancelar")
+        }
+        setenv("OMNIMOUNT_LANG", "esperanto", 1)
+        XCTAssertEqual(L10n.t("app.common.cancel"), "Cancel")
 
         setenv("OMNIMOUNT_LANG", "fr", 1)
         XCTAssertEqual(L10n.t("app.common.cancel"), "Cancel")
