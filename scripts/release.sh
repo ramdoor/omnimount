@@ -10,7 +10,7 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_DIR"
-VERSION="0.4.8"
+VERSION="0.4.9"
 SKIP_NOTARIZE="${1:-}"
 if [ "$#" -gt 1 ] || { [ -n "$SKIP_NOTARIZE" ] && [ "$SKIP_NOTARIZE" != --skip-notarize ]; }; then
     terr sh.release.usage

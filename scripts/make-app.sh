@@ -65,8 +65,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key>              <string>Omnimount</string>
     <key>CFBundleDisplayName</key>       <string>Omnimount</string>
     <key>CFBundleIdentifier</key>        <string>org.omnimount.app</string>
-    <key>CFBundleVersion</key>           <string>0.4.8</string>
-    <key>CFBundleShortVersionString</key><string>0.4.8</string>
+    <key>CFBundleVersion</key>           <string>0.4.9</string>
+    <key>CFBundleShortVersionString</key><string>0.4.9</string>
     <key>CFBundleExecutable</key>        <string>Omnimount</string>
     <key>CFBundleIconFile</key>          <string>AppIcon</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>

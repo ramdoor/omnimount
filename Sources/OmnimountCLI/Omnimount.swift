@@ -7,7 +7,7 @@ struct Omnimount: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "omnimount",
         abstract: L10n.t("cli.root.abstract"),
-        version: "0.4.8",
+        version: "0.4.9",
         subcommands: [
             List.self, Detect.self, Mount.self, Unmount.self,
             Test.self, Clone.self, Restore.self, Doctor.self,

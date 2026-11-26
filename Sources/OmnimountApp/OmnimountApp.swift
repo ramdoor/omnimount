@@ -43,10 +43,12 @@ struct OmnimountApp: App {
 
     // La barra de menú la gestiona el AppDelegate con NSStatusItem (funciona
     // en macOS 12 y 13+ por igual; MenuBarExtra es solo de 13+). Una escena
-    // Settings vacía cumple el requisito de tener al menos una y no muestra
-    // ventana al arrancar.
+    // Settings presenta la configuración real también al usar el menú estándar
+    // de macOS; no abre una ventana al arrancar.
     var body: some Scene {
-        Settings { EmptyView() }
+        Settings {
+            SetupView().environmentObject(AppServices.shared.mountController)
+        }
     }
 }
 
