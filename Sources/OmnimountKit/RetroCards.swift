@@ -10,28 +10,32 @@ public struct RetroCardMatch: Sendable {
 /// por las etiquetas de partición características de cada firmware.
 public enum RetroCards {
 
-    private static let knownLabels: [(label: String, firmware: String, advice: String)] = [
-        ("EASYROMS", "ArkOS",
-         L10n.t("Tarjeta de ArkOS. La partición EASYROMS contiene tus roms; la partición del sistema es ext4 y no debe modificarse a mano. Haz una copia con `omnimount clone` antes de tocar nada.", "ArkOS card. The EASYROMS partition holds your roms; the system partition is ext4 and should not be edited by hand. Back it up with `omnimount clone` before touching anything.")),
-        ("ARKOS", "ArkOS",
-         L10n.t("Tarjeta de ArkOS. La partición EASYROMS contiene tus roms; la partición del sistema es ext4 y no debe modificarse a mano. Haz una copia con `omnimount clone` antes de tocar nada.", "ArkOS card. The EASYROMS partition holds your roms; the system partition is ext4 and should not be edited by hand. Back it up with `omnimount clone` before touching anything.")),
-        ("BATOCERA", "Batocera",
-         L10n.t("Tarjeta de Batocera. La partición de usuario (SHARE) es ext4; móntala con Omnimount para gestionar roms y saves.", "Batocera card. The user partition (SHARE) is ext4; mount it with Omnimount to manage roms and saves.")),
-        ("SHARE", "Batocera",
-         L10n.t("Posible partición de datos de Batocera (roms/saves en ext4).", "Likely a Batocera data partition (roms/saves on ext4).")),
-        ("ROCKNIX", "ROCKNIX/JELOS",
-         L10n.t("Tarjeta de ROCKNIX (antes JELOS). La partición de juegos suele ser ext4.", "ROCKNIX card (formerly JELOS). The games partition is usually ext4.")),
-        ("GAMES", "ROCKNIX/JELOS",
-         L10n.t("Posible partición de juegos de ROCKNIX/JELOS (ext4).", "Likely a ROCKNIX/JELOS games partition (ext4).")),
-        ("ROMS", "muOS / Knulli",
-         L10n.t("Partición de roms típica de muOS o Knulli.", "Typical muOS or Knulli roms partition.")),
-        ("RETROPIE", "RetroPie",
-         L10n.t("Tarjeta de RetroPie. El sistema es ext4; los roms viven en /home/pi/RetroPie/roms dentro de la partición del sistema.", "RetroPie card. The system is ext4; roms live at /home/pi/RetroPie/roms inside the system partition.")),
-        ("RECALBOX", "Recalbox",
-         L10n.t("Tarjeta de Recalbox. La partición de datos es ext4.", "Recalbox card. The data partition is ext4.")),
-        ("BOOT", "Raspberry Pi (genérico)",
-         L10n.t("Partición de arranque de una imagen tipo Raspberry Pi; la partición del sistema acompañante suele ser ext4.", "Boot partition of a Raspberry Pi-style image; the companion system partition is usually ext4.")),
-    ]
+    /// Se resuelve en cada consulta para seguir el idioma del proceso, no el
+    /// que hubiera al cargar el tipo.
+    private static func knownCards() -> [(label: String, firmware: String, advice: String)] {
+        [
+            ("EASYROMS", "ArkOS",
+             L10n.t("retro.arkos.advice")),
+            ("ARKOS", "ArkOS",
+             L10n.t("retro.arkos.advice")),
+            ("BATOCERA", "Batocera",
+             L10n.t("retro.batocera.advice")),
+            ("SHARE", "Batocera",
+             L10n.t("retro.batocera.share")),
+            ("ROCKNIX", "ROCKNIX/JELOS",
+             L10n.t("retro.rocknix.advice")),
+            ("GAMES", "ROCKNIX/JELOS",
+             L10n.t("retro.rocknix.games")),
+            ("ROMS", "muOS / Knulli",
+             L10n.t("retro.muos.advice")),
+            ("RETROPIE", "RetroPie",
+             L10n.t("retro.retropie.advice")),
+            ("RECALBOX", "Recalbox",
+             L10n.t("retro.recalbox.advice")),
+            ("BOOT", L10n.t("retro.pi.name"),
+             L10n.t("retro.pi.advice")),
+        ]
+    }
 
     /// Comprueba las particiones de un disco contra las etiquetas conocidas.
     public static func identify(partitions: [DiskPartition],
@@ -45,6 +49,7 @@ public enum RetroCards {
         }
 
         let normalized = labels.map { $0.uppercased().trimmingCharacters(in: .whitespaces) }
+        let knownLabels = knownCards()
         // Coincidencia exacta primero; después por prefijo ("ARKOS-128G" → ARKOS).
         for label in normalized {
             if let match = knownLabels.first(where: { $0.label == label }) {

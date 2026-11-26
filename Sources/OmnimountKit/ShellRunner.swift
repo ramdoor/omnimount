@@ -22,7 +22,7 @@ public enum ShellError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .launchFailed(let tool, let error):
-            return "No se pudo ejecutar \(tool): \(error.localizedDescription)"
+            return L10n.t("error.shell.launch", tool, error.localizedDescription)
         }
     }
 }

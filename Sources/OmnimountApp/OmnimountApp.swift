@@ -36,7 +36,7 @@ struct OmnimountApp: App {
         // dejaría un proceso colgado esperando eternamente.
         let args = CommandLine.arguments.dropFirst()
         if !args.isEmpty && !args.allSatisfy({ $0.hasPrefix("-") }) {
-            FileHandle.standardError.write(Data((L10n.t("Esto es la app de menú Omnimount, no el CLI. Usa el comando omnimount (/usr/local/bin/omnimount).", "This is the Omnimount menu bar app, not the CLI. Use the omnimount command (/usr/local/bin/omnimount).") + "\n").utf8))
+            FileHandle.standardError.write(Data((L10n.t("app.alert.notCli") + "\n").utf8))
             exit(64)
         }
     }
@@ -113,7 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let win = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 560, height: 640),
                 styleMask: [.titled, .closable], backing: .buffered, defer: false)
-            win.title = L10n.t("Configuración de Omnimount", "Omnimount Setup")
+            win.title = L10n.t("app.setup.title")
             win.contentViewController = NSHostingController(rootView:
                 SetupView().environmentObject(AppServices.shared.mountController))
             win.isReleasedWhenClosed = false

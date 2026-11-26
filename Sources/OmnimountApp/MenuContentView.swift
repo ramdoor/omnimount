@@ -38,7 +38,7 @@ struct MenuContentView: View {
             }
 
             if monitor.disks.isEmpty {
-                Text(L10n.t("No hay discos externos conectados.", "No external disks connected."))
+                Text(L10n.t("disk.list.empty"))
                     .foregroundStyle(.secondary)
                     .font(.callout)
             } else {
@@ -49,16 +49,14 @@ struct MenuContentView: View {
 
             if let target = mountController.quotaFixTarget {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(L10n.t(
-                        "\(target.deviceIdentifier) usa cuotas internas de ext4 (típico de discos de NAS). fuse2fs no puede montarlas, pero se pueden desactivar sin borrar datos. Si el disco vuelve a un NAS, este recalculará sus cuotas.",
-                        "\(target.deviceIdentifier) uses ext4 internal quotas (typical of NAS disks). fuse2fs cannot mount them, but they can be disabled without touching your data. If the disk goes back into a NAS, it will rebuild its quotas."))
+                    Text(L10n.t("app.menu.quota", target.deviceIdentifier))
                         .font(.caption)
                     HStack {
-                        Button(L10n.t("Desactivar cuotas y montar", "Disable quotas and mount")) {
+                        Button(L10n.t("app.menu.disableQuotas")) {
                             mountController.fixQuotaAndMount(target) { monitor.refresh() }
                         }
                         .controlSize(.small)
-                        Button(L10n.t("Cancelar", "Cancel")) { mountController.quotaFixTarget = nil }
+                        Button(L10n.t("app.common.cancel")) { mountController.quotaFixTarget = nil }
                             .controlSize(.small)
                     }
                 }
@@ -103,16 +101,16 @@ struct MenuContentView: View {
 
             HStack {
                 Button { monitor.refresh() } label: { Image(systemName: "arrow.clockwise") }
-                    .help(L10n.t("Refrescar la lista de discos", "Refresh disk list"))
-                Button(L10n.t("Actualizaciones…", "Updates…")) {
+                    .help(L10n.t("app.menu.refresh"))
+                Button(L10n.t("app.menu.updates")) {
                     Updater.controller.checkForUpdates(nil)
                     NSApp.activate(ignoringOtherApps: true)
                 }
-                Button(L10n.t("Configuración…", "Setup…")) {
+                Button(L10n.t("app.menu.setup")) {
                     openSetup()
                 }
                 Spacer()
-                Button(L10n.t("Salir", "Quit")) { NSApplication.shared.terminate(nil) }
+                Button(L10n.t("app.menu.quit")) { NSApplication.shared.terminate(nil) }
             }
             .buttonStyle(.borderless)
             .font(.callout)
@@ -132,31 +130,31 @@ struct MenuContentView: View {
     private var helperStatus: some View {
         switch mountController.helper.state {
         case .enabled:
-            Label(L10n.t("Helper activo: montaje sin contraseñas", "Helper active: password-free mounting"), systemImage: "bolt.badge.checkmark")
+            Label(L10n.t("app.menu.helperOn"), systemImage: "bolt.badge.checkmark")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         case .requiresApproval:
             VStack(alignment: .leading, spacing: 4) {
-                Label(L10n.t("Falta aprobar el helper en Ajustes → Elementos de inicio", "Approve the helper in Settings → Login Items"), systemImage: "clock.badge.exclamationmark")
+                Label(L10n.t("app.menu.approveHelper"), systemImage: "clock.badge.exclamationmark")
                     .font(.caption)
                     .foregroundStyle(.orange)
-                Button(L10n.t("Abrir Ajustes", "Open Settings")) {
+                Button(L10n.t("app.menu.openSettings")) {
                     if #available(macOS 13.0, *) { SMAppService.openSystemSettingsLoginItems() }
                 }
                     .controlSize(.small)
             }
         case .notRegistered:
             VStack(alignment: .leading, spacing: 4) {
-                Label(L10n.t("Activa el helper para montar sin contraseñas", "Enable the helper to mount without passwords"), systemImage: "bolt.slash")
+                Label(L10n.t("app.menu.enableHelperHint"), systemImage: "bolt.slash")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Button(L10n.t("Activar helper", "Enable helper")) {
+                Button(L10n.t("app.common.enableHelper")) {
                     mountController.helper.install()
                 }
                 .controlSize(.small)
             }
         case .unavailable(let reason):
-            Label(L10n.t("Helper no disponible: \(reason)", "Helper unavailable: \(reason)"), systemImage: "xmark.octagon")
+            Label(L10n.t("app.menu.helperUnavailable", reason), systemImage: "xmark.octagon")
                 .font(.caption)
                 .foregroundStyle(.red)
                 .lineLimit(3)
@@ -167,22 +165,22 @@ struct MenuContentView: View {
     private var dependencyStatus: some View {
         let d = diagnosis
         if d.canMountExt && d.canMountNTFS && mountController.isCLIInstalled {
-            Label(L10n.t("Dependencias correctas", "All dependencies OK"), systemImage: "checkmark.circle")
+            Label(L10n.t("app.menu.dependenciesOk"), systemImage: "checkmark.circle")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         } else {
             VStack(alignment: .leading, spacing: 2) {
                 if !d.hasFuseLayer {
-                    Label(L10n.t("Falta la capa FUSE (abre Configuración…)", "FUSE layer missing (open Setup…)"), systemImage: "exclamationmark.triangle")
+                    Label(L10n.t("app.menu.fuseMissing"), systemImage: "exclamationmark.triangle")
                 }
                 if d.fuse2fs == nil {
-                    Label(L10n.t("Falta fuse2fs (reinstala la app)", "fuse2fs missing (reinstall the app)"), systemImage: "exclamationmark.triangle")
+                    Label(L10n.t("app.menu.fuse2fsMissing"), systemImage: "exclamationmark.triangle")
                 }
                 if d.ntfs3g == nil {
-                    Label(L10n.t("Falta ntfs-3g (reinstala la app)", "ntfs-3g missing (reinstall the app)"), systemImage: "exclamationmark.triangle")
+                    Label(L10n.t("app.menu.ntfsMissing"), systemImage: "exclamationmark.triangle")
                 }
                 if !mountController.isCLIInstalled {
-                    Label(L10n.t("Falta el CLI omnimount (make install)", "omnimount CLI missing (make install)"), systemImage: "exclamationmark.triangle")
+                    Label(L10n.t("app.menu.cliMissing"), systemImage: "exclamationmark.triangle")
                 }
             }
             .font(.caption)
@@ -204,13 +202,13 @@ private struct DiskSection: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Menu {
-                    Button(L10n.t("Clonar disco a imagen…", "Clone disk to image…")) {
+                    Button(L10n.t("app.menu.cloneDisk")) {
                         mountController.cloneToImage(
                             identifier: disk.deviceIdentifier,
                             suggestedName: disk.mediaName ?? disk.deviceIdentifier,
                             totalBytes: disk.size) { monitor.refresh() }
                     }
-                    Button(L10n.t("Restaurar imagen en el disco…", "Restore image onto disk…"), role: .destructive) {
+                    Button(L10n.t("app.menu.restoreDisk"), role: .destructive) {
                         mountController.restoreImage(
                             identifier: disk.deviceIdentifier,
                             displayName: disk.mediaName ?? disk.deviceIdentifier) { monitor.refresh() }
@@ -221,7 +219,7 @@ private struct DiskSection: View {
                 .menuStyle(.borderlessButton)
                 .frame(width: 24)
                 .disabled(mountController.cloneLabel != nil)
-                .help(L10n.t("Clonar / restaurar el disco entero", "Clone / restore the whole disk"))
+                .help(L10n.t("app.menu.cloneHelp"))
             }
             ForEach(disk.partitions) { partition in
                 PartitionRow(partition: partition)
@@ -259,35 +257,35 @@ private struct PartitionRow: View {
             } else if let mountPoint = omnimountMountPoint {
                 if mountController.readOnlyPartitions.contains(partition.deviceIdentifier)
                     || monitor.readOnlyByMacOS.contains(partition.deviceIdentifier) {
-                    Button(L10n.t("Hacer escribible", "Make writable")) {
+                    Button(L10n.t("app.common.makeWritable")) {
                         mountController.makeWritable(partition) { monitor.refresh() }
                     }
                     .tint(.orange)
-                    .help(L10n.t("Solo lectura: Windows dejó el disco NTFS en estado inconsistente. Pulsa para hacerlo escribible.", "Read-only: Windows left this NTFS disk in an unclean state. Click to make it writable."))
+                    .help(L10n.t("app.menu.readOnlyHelp"))
                 }
                 Button {
                     mountController.revealInFinder(mountPoint)
                 } label: {
                     Image(systemName: "folder")
                 }
-                .help(L10n.t("Mostrar en Finder", "Reveal in Finder"))
-                Button(L10n.t("Expulsar", "Eject")) {
+                .help(L10n.t("app.menu.reveal"))
+                Button(L10n.t("app.menu.eject")) {
                     mountController.unmount(partition) { monitor.refresh() }
                 }
             } else {
-                Button(L10n.t("Montar", "Mount")) {
+                Button(L10n.t("app.menu.mount")) {
                     mountController.mount(partition) { monitor.refresh() }
                 }
             }
 
             Menu {
-                Button(L10n.t("Clonar partición a imagen…", "Clone partition to image…")) {
+                Button(L10n.t("app.menu.clonePartition")) {
                     mountController.cloneToImage(
                         identifier: partition.deviceIdentifier,
                         suggestedName: partition.volumeName ?? partition.deviceIdentifier,
                         totalBytes: partition.size) { monitor.refresh() }
                 }
-                Button(L10n.t("Formatear…", "Format…"), role: .destructive) {
+                Button(L10n.t("app.menu.format"), role: .destructive) {
                     mountController.formatTarget = partition
                 }
             } label: {
@@ -295,7 +293,7 @@ private struct PartitionRow: View {
             }
             .menuStyle(.borderlessButton)
             .frame(width: 24)
-            .help(L10n.t("Más acciones", "More actions"))
+            .help(L10n.t("app.menu.more"))
         }
         .buttonStyle(.bordered)
         .controlSize(.small)

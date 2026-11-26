@@ -14,27 +14,23 @@ public enum MountError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .notRoot:
-            return L10n.t("Montar requiere privilegios de root. Ejecuta el comando con sudo.", "Mounting requires root privileges. Run the command with sudo.")
+            return L10n.t("error.mount.notRoot")
         case .macFUSEMissing:
-            return L10n.t("No hay capa FUSE instalada. Recomendado: brew install --cask macos-fuse-t/cask/fuse-t (sin kext). Alternativa: brew install --cask macfuse.", "No FUSE layer installed. Recommended: brew install --cask macos-fuse-t/cask/fuse-t (kext-free). Alternative: brew install --cask macfuse.")
+            return L10n.t("error.mount.noFuse")
         case .toolMissing(let tool):
-            return L10n.t("No se encontró \(tool.rawValue). Consulta el README para instalarlo.", "\(tool.rawValue) not found. See the README to install it.")
+            return L10n.t("error.mount.toolMissing", tool.rawValue)
         case .unsupportedFilesystem(let fs):
-            return L10n.t("Omnimount no puede montar \(fs.displayName).", "Omnimount cannot mount \(fs.displayName).")
+            return L10n.t("error.mount.unsupported", fs.displayName)
         case .mountFailed(let tool, let stderr):
-            return L10n.t("\(tool) falló al montar: \(stderr)", "\(tool) failed to mount: \(stderr)")
+            return L10n.t("error.mount.failed", tool, stderr)
         case .unmountFailed(let message):
-            return L10n.t("No se pudo desmontar: \(message)", "Could not unmount: \(message)")
+            return L10n.t("error.mount.unmount", message)
         case .fsckFailed(let message):
-            return L10n.t("La verificación (fsck) encontró problemas: \(message)", "Verification (fsck) found problems: \(message)")
+            return L10n.t("error.mount.fsck", message)
         case .ext4NeedsRepair(let device, let detail):
-            return L10n.t(
-                "No se puede montar \(device) en escritura: e2fsck no terminó con un resultado seguro. Comprueba el disco desmontado con e2fsck o desde Linux antes de volver a intentarlo. Detalle: \(detail)",
-                "Cannot mount \(device) for writing: e2fsck did not finish with a safe result. Check the unmounted disk with e2fsck or from Linux before retrying. Detail: \(detail)")
+            return L10n.t("error.mount.needsRepair", device, detail)
         case .ext4QuotaUnsupported(let device):
-            return L10n.t(
-                "Este disco usa cuotas internas de ext4 (habitual en discos de NAS), que fuse2fs no soporta. Desactívalas (no borra datos) con: sudo omnimount mount \(device) --fix-quota — o con tune2fs -O ^quota,^project.",
-                "This disk uses ext4 internal quotas (common on NAS disks), which fuse2fs does not support. Disable them (no data loss) with: sudo omnimount mount \(device) --fix-quota — or with tune2fs -O ^quota,^project.")
+            return L10n.t("error.mount.quota", device)
         }
     }
 }
@@ -161,7 +157,7 @@ public enum Mounter {
         guard mounted else {
             throw MountError.mountFailed(
                 tool: tool.rawValue,
-                stderr: L10n.t("\(tool.rawValue) terminó sin error pero el volumen no aparece montado. Causa habitual: la capa FUSE no está operativa (kext bloqueado o instalación incompleta). Salida: \(result.stdout) \(result.stderr)", "\(tool.rawValue) exited cleanly but the volume is not mounted. Usual cause: the FUSE layer is not operational (blocked kext or incomplete install). Output: \(result.stdout) \(result.stderr)"))
+                stderr: L10n.t("error.mount.notVisible", tool.rawValue, result.stdout, result.stderr))
         }
 
         return MountResult(
@@ -268,8 +264,7 @@ public enum Mounter {
         if let mountPoint, isMounted(mountPoint) {
             try unmount(mountPoint)
             guard !isMounted(mountPoint) else {
-                throw MountError.unmountFailed(L10n.t(
-                    "El volumen sigue montado en \(mountPoint).", "The volume is still mounted at \(mountPoint)."))
+                throw MountError.unmountFailed(L10n.t("error.mount.stillMounted", mountPoint))
             }
         }
         // -d limpia la marca "dirty" solo si ntfsfix puede reparar el volumen.

@@ -21,18 +21,18 @@ public enum CloneError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .notRoot:
-            return L10n.t("Clonar/restaurar accede al dispositivo en bruto: ejecuta con sudo.", "Cloning/restoring accesses the raw device: run with sudo.")
+            return L10n.t("error.clone.notRoot")
         case .cannotOpen(let path):
-            return L10n.t("No se pudo abrir \(path).", "Could not open \(path).")
+            return L10n.t("error.clone.open", path)
         case .sizeUnknown(let disk):
-            return L10n.t("No se pudo determinar el tamaño de \(disk).", "Could not determine the size of \(disk).")
+            return L10n.t("error.clone.size", disk)
         case .imageLargerThanTarget(let image, let target):
             let f = ByteCountFormatter()
-            return L10n.t("La imagen (\(f.string(fromByteCount: image))) no cabe en el destino (\(f.string(fromByteCount: target))).", "The image (\(f.string(fromByteCount: image))) does not fit in the target (\(f.string(fromByteCount: target))).")
+            return L10n.t("error.clone.tooBig", f.string(fromByteCount: image), f.string(fromByteCount: target))
         case .unmountFailed(let message):
-            return L10n.t("No se pudo desmontar el disco antes de la operación: \(message)", "Could not unmount the disk before the operation: \(message)")
+            return L10n.t("error.clone.unmount", message)
         case .ioError(let message):
-            return L10n.t("Error de E/S: \(message)", "I/O error: \(message)")
+            return L10n.t("error.clone.io", message)
         }
     }
 }
@@ -72,9 +72,7 @@ public enum Cloner {
             ? disks.flatMap(\.partitions).filter { $0.deviceIdentifier == identifier }
             : disks.first { $0.deviceIdentifier == identifier }?.partitions ?? []
         guard !partitions.isEmpty else {
-            throw CloneError.unmountFailed(L10n.t(
-                "No se encontró el objetivo externo \(identifier).",
-                "External target \(identifier) was not found."))
+            throw CloneError.unmountFailed(L10n.t("error.clone.missing", identifier))
         }
         return partitions
     }
@@ -91,9 +89,7 @@ public enum Cloner {
             if let point = operations.currentMountPoint(partition.devicePath) ?? partition.mountPoint {
                 knownMounts.insert(point)
             } else if let possible = operations.possibleFuseMountPoint(partition) {
-                throw CloneError.unmountFailed(L10n.t(
-                    "Posible montaje FUSE-T en \(possible). Expulsa el volumen desde Omnimount y vuelve a intentarlo; la etiqueta no identifica el disco de forma inequívoca.",
-                    "Possible FUSE-T mount at \(possible). Eject the volume in Omnimount and try again; its label does not uniquely identify the disk."))
+                throw CloneError.unmountFailed(L10n.t("error.clone.ambiguous", possible))
             }
         }
         for point in knownMounts.sorted() {
@@ -118,9 +114,7 @@ public enum Cloner {
             if let point = partition.mountPoint
                 ?? operations.currentMountPoint(partition.devicePath)
                 ?? operations.possibleFuseMountPoint(partition) {
-                throw CloneError.unmountFailed(L10n.t(
-                    "\(identifier) sigue montado o tiene un montaje FUSE-T sin identificar en \(point). Expúlsalo desde Omnimount y vuelve a intentarlo.",
-                    "\(identifier) is still mounted or has an unidentified FUSE-T mount at \(point). Eject it in Omnimount and try again."))
+                throw CloneError.unmountFailed(L10n.t("error.clone.stillMounted", identifier, point))
             }
         }
     }
@@ -207,9 +201,7 @@ public enum Cloner {
             throw CloneError.cannotOpen(imagePath)
         }
         guard imageSize > 0 else {
-            throw CloneError.ioError(L10n.t(
-                "La imagen está vacía; no se puede restaurar.",
-                "The image is empty and cannot be restored."))
+            throw CloneError.ioError(L10n.t("error.clone.empty"))
         }
         return imageSize
     }
@@ -232,18 +224,16 @@ public enum Cloner {
                     let count = Int(min(Int64(chunkSize), totalBytes - copied))
                     chunk = try input.read(upToCount: count) ?? Data()
                 } catch {
-                    throw CloneError.ioError("lectura en offset \(copied): \(error.localizedDescription)")
+                    throw CloneError.ioError(L10n.t("error.clone.read", String(copied), error.localizedDescription))
                 }
                 guard !chunk.isEmpty else {
-                    throw CloneError.ioError(L10n.t(
-                        "Fin de archivo inesperado: copiados \(copied) de \(totalBytes) bytes.",
-                        "Unexpected end of file: copied \(copied) of \(totalBytes) bytes."))
+                    throw CloneError.ioError(L10n.t("error.clone.shortRead", String(copied), String(totalBytes)))
                 }
 
                 do {
                     try output.write(contentsOf: chunk)
                 } catch {
-                    throw CloneError.ioError("escritura en offset \(copied): \(error.localizedDescription)")
+                    throw CloneError.ioError(L10n.t("error.clone.write", String(copied), error.localizedDescription))
                 }
 
                 copied += Int64(chunk.count)
