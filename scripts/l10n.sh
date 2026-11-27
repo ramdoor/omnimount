@@ -42,6 +42,9 @@ sh.makeApp.missingTool	WARNING: vendor/bin/%@ is missing (scripts/build-ntfs3g.s
 sh.makeApp.signingDist	==> Signing for distribution: %@	==> Firmando para distribución: %@
 sh.makeApp.signingDev	==> Development signature: %@	==> Firma de desarrollo: %@
 sh.makeApp.created	==> Created %@	==> Creado %@
+sh.makeApp.noSparkle	ERROR: Sparkle.framework not found at %@ (run swift build to fetch it).	ERROR: no se encuentra Sparkle.framework en %@ (ejecuta swift build para descargarlo).
+sh.makeApp.rpathFailed	ERROR: could not add the Frameworks rpath to %@.	ERROR: no se pudo añadir el rpath de Frameworks a %@.
+sh.makeApp.noTeamId	WARNING: this build has no Team ID (ad-hoc or self-signed). The privileged helper rejects clients not signed with its own Team ID, so this app will not be able to use it. Sign with an Apple Development identity (Xcode > Settings > Accounts) to test the helper.	AVISO: esta build no tiene Team ID (firma ad-hoc o autofirmada). El helper privilegiado rechaza clientes que no estén firmados con su mismo Team ID, así que esta app no podrá usarlo. Firma con una identidad Apple Development (Xcode > Ajustes > Cuentas) para probar el helper.
 sh.makeApp.openHint	Open it with: open "%@"	Ábrela con: open "%@"
 sh.release.usage	Usage: release.sh [--skip-notarize]	Uso: release.sh [--skip-notarize]
 sh.release.noAppcastTool	ERROR: vendor/bin/generate_appcast is missing (it ships with Sparkle). Place it there before releasing.	ERROR: falta vendor/bin/generate_appcast (se distribuye con Sparkle). Colócalo ahí antes de la release.
