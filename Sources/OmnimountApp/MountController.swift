@@ -226,31 +226,60 @@ final class MountController: ObservableObject {
             completion()
             return
         }
-        guard beginOperation(on: partition.deviceIdentifier, wholeDisk: partition.parentWholeDisk) else {
+        let id = partition.deviceIdentifier
+        guard beginOperation(on: id, wholeDisk: partition.parentWholeDisk) else {
             completion(); return
+        }
+        // Único punto de salida: libera el disco y llama a completion una vez.
+        var finished = false
+        let finish: (_ error: String?, _ summary: String?) -> Void = { [weak self] error, summary in
+            guard !finished else { return }
+            finished = true
+            self?.endOperation(on: id)
+            self?.lastMessage = error
+            if let summary { self?.lastFormatSummary = summary }
+            completion()
+        }
+        let sendFormat = { [weak self] in
+            guard let self else { return }
+            self.helper.format(deviceIdentifier: id, filesystem: filesystem,
+                               label: label) { [weak self] ok, message in
+                if ok { self?.monitor?.forgetOmnimountMount(deviceIdentifier: id) }
+                finish(ok ? nil : message, ok ? message : nil)
+            }
         }
         verifyIdentity(expected) { [weak self] stillSame in
             guard let self else { return }
             guard stillSame else {
-                self.endOperation(on: partition.deviceIdentifier)
-                self.lastMessage = L10n.t("app.alert.diskChanged", partition.deviceIdentifier)
-                completion()
+                finish(L10n.t("app.alert.diskChanged", id), nil)
                 return
             }
-            self.helper.format(deviceIdentifier: partition.deviceIdentifier,
-                               filesystem: filesystem, label: label) { [weak self] ok, message in
-                guard let self else { return }
-                self.endOperation(on: partition.deviceIdentifier)
-                if ok {
-                    self.lastMessage = nil
-                    self.lastFormatSummary = message
-                    self.monitor?.forgetOmnimountMount(deviceIdentifier: partition.deviceIdentifier)
-                } else {
-                    self.lastMessage = message
+            // Una partición montada (por Omnimount o por macOS) se expulsa
+            // antes, por la misma vía que el botón Expulsar: el formateo no
+            // desmonta por su cuenta un montaje FUSE-T que solo se localiza
+            // por la etiqueta. Si la expulsión falla, no se formatea.
+            guard self.currentMountPoint(of: id) != nil else {
+                sendFormat()
+                return
+            }
+            self.helper.unmount(target: id) { [weak self] ok, message in
+                guard ok else {
+                    finish(L10n.t("app.alert.formatEjectFailed", id, message), nil)
+                    return
                 }
-                completion()
+                self?.monitor?.forgetOmnimountMount(deviceIdentifier: id)
+                self?.readOnlyPartitions.remove(id)
+                sendFormat()
             }
         }
+    }
+
+    /// Punto de montaje actual de la partición según el monitor: el
+    /// registrado como montaje de Omnimount o, si no, el que informa macOS.
+    private func currentMountPoint(of identifier: String) -> String? {
+        if let point = monitor?.mountedByOmnimount[identifier] { return point }
+        return monitor?.disks.flatMap(\.partitions)
+            .first { $0.deviceIdentifier == identifier }?.mountPoint
     }
 
     private func runViaHelper(partition: DiskPartition, verb: String,
