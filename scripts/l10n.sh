@@ -90,6 +90,11 @@ sh.buildFuse.missingAnchor	a unique option-parsing site was not found	no se enco
 sh.buildFuse.compilingIntel	==> Compiling x86_64 (configure runs its tests under Rosetta)	==> Compilando x86_64 (configure corre sus tests bajo Rosetta)
 sh.buildFuse.oldMacOS	ERROR: %@ (%@) requires macOS %@; rebuild with MACOSX_DEPLOYMENT_TARGET=13.0.	ERROR: %@ (%@) requiere macOS %@; recompila con MACOSX_DEPLOYMENT_TARGET=13.0.
 sh.buildFuse.notFuseT	ERROR: fuse2fs (%@) is not linked exclusively against FUSE-T.	ERROR: fuse2fs (%@) no está enlazado exclusivamente contra FUSE-T.
+sh.buildFuse.noHeaders	ERROR: FUSE-T headers (fuse.h) not found in %@ or %@.	ERROR: no se encuentran las cabeceras de FUSE-T (fuse.h) en %@ ni en %@.
+sh.buildFuse.spaceInPath	ERROR: the build directory must not contain spaces: %@	ERROR: el directorio de compilación no puede contener espacios: %@
+sh.buildFuse.badChecksum	ERROR: SHA-256 mismatch for %@ (expected %@, got %@); file removed.	ERROR: SHA-256 no coincide para %@ (esperado %@, obtenido %@); fichero eliminado.
+sh.buildFuse.unpinned	WARNING: no pinned SHA-256 for e2fsprogs %@; download integrity not verified.	AVISO: no hay SHA-256 fijado para e2fsprogs %@; no se verifica la integridad de la descarga.
+sh.buildFuse.failedLog	ERROR: build step failed. Full log: %@ (last lines below):	ERROR: falló un paso de la compilación. Log completo: %@ (últimas líneas abajo):
 EOF
 }
 

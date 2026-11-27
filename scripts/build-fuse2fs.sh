@@ -21,11 +21,27 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 VENDOR_BIN="${E2FSPROGS_OUTPUT_DIR:-$REPO_DIR/vendor/bin}"
 BUILD_DIR="${E2FSPROGS_BUILD_DIR:-${TMPDIR:-/tmp}/omnimount-fuse2fs-build}"
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.0}"
+FUSE_T_INCLUDE_PRIMARY="${FUSE_T_INCLUDE_PRIMARY:-/usr/local/include/fuse}"
+FUSE_T_INCLUDE_FALLBACK="/Library/Application Support/fuse-t/include/fuse"
+FUSE_T_INCLUDE=""
 
 case "$BACKEND" in
 fuse-t)
     if [ ! -f /usr/local/lib/libfuse-t.dylib ]; then
         terr sh.common.noFuseT
+        terr sh.common.installFuseT
+        exit 1
+    fi
+    # Cabeceras de FUSE-T: el instalador enlaza /usr/local/include/fuse al
+    # directorio real, pero ese enlace puede faltar; probar también el real.
+    for dir in "$FUSE_T_INCLUDE_PRIMARY" "$FUSE_T_INCLUDE_FALLBACK"; do
+        if [ -f "$dir/fuse.h" ]; then
+            FUSE_T_INCLUDE="$dir"
+            break
+        fi
+    done
+    if [ -z "$FUSE_T_INCLUDE" ]; then
+        terr sh.buildFuse.noHeaders "$FUSE_T_INCLUDE_PRIMARY" "$FUSE_T_INCLUDE_FALLBACK"
         terr sh.common.installFuseT
         exit 1
     fi
@@ -51,6 +67,21 @@ t sh.buildFuse.backend "$BACKEND"
 mkdir -p "$BUILD_DIR"
 BUILD_DIR="$(cd "$BUILD_DIR" && pwd)"
 cd "$BUILD_DIR"
+if [ "$BACKEND" = fuse-t ]; then
+    # configure parte CPPFLAGS/LDFLAGS por espacios: el directorio de
+    # compilación y las rutas de FUSE-T (que tiene un espacio) no pueden ir
+    # directamente. Se llega a ellas por enlaces simbólicos dentro del shim:
+    #   include -> cabeceras de FUSE-T; lib/libfuse.dylib -> libfuse-t.dylib
+    # (configure sondea -lfuse; el enlace final sigue usando libfuse-t).
+    case "$BUILD_DIR" in
+    *[[:space:]]*) terr sh.buildFuse.spaceInPath "$BUILD_DIR"; exit 1 ;;
+    esac
+    FUSE_T_SHIM="$BUILD_DIR/fuse-t-shim"
+    rm -rf "$FUSE_T_SHIM"
+    mkdir -p "$FUSE_T_SHIM/lib"
+    ln -s "$FUSE_T_INCLUDE" "$FUSE_T_SHIM/include"
+    ln -s /usr/local/lib/libfuse-t.dylib "$FUSE_T_SHIM/lib/libfuse.dylib"
+fi
 if [ -n "${E2FSPROGS_SOURCE_DIR:-}" ]; then
     # Copiar antes de parchear: no modificar unas fuentes facilitadas por el llamante.
     rm -rf "e2fsprogs-$E2FSPROGS_VERSION.source-copy"
@@ -61,8 +92,28 @@ else
     t sh.buildFuse.downloading "$E2FSPROGS_VERSION"
     TARBALL="e2fsprogs-$E2FSPROGS_VERSION.tar.xz"
     if [ ! -f "$TARBALL" ]; then
-        curl -fL -o "$TARBALL" \
+        # Descargar a un nombre temporal: una descarga interrumpida no debe
+        # quedar con el nombre final ni reutilizarse.
+        rm -f "$TARBALL.part"
+        curl -fL -o "$TARBALL.part" \
             "https://mirrors.edge.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v$E2FSPROGS_VERSION/$TARBALL"
+        mv "$TARBALL.part" "$TARBALL"
+    fi
+    # SHA-256 de la versión por defecto, de sha256sums.asc que kernel.org
+    # publica junto a esa release (.../tytso/e2fsprogs/v1.47.3/sha256sums.asc).
+    case "$E2FSPROGS_VERSION" in
+    1.47.3) EXPECTED_SHA256=857e6ef800feaa2bb4578fbc810214be5d3c88b072ea53c5384733a965737329 ;;
+    *) EXPECTED_SHA256="" ;;
+    esac
+    if [ -n "$EXPECTED_SHA256" ]; then
+        ACTUAL_SHA256="$(shasum -a 256 "$TARBALL" | awk '{print $1}')"
+        if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            rm -f "$TARBALL"
+            terr sh.buildFuse.badChecksum "$TARBALL" "$EXPECTED_SHA256" "$ACTUAL_SHA256"
+            exit 1
+        fi
+    else
+        terr sh.buildFuse.unpinned "$E2FSPROGS_VERSION"
     fi
     rm -rf "e2fsprogs-$E2FSPROGS_VERSION"
     tar xf "$TARBALL"
@@ -156,9 +207,21 @@ else:
     print(os.environ["OM_PATCH_ALREADY"])
 PY
 
+# Ejecuta un paso de la compilación guardando su salida en un log; si falla,
+# muestra el final del log. Todos los pasos siguen siendo fatales, como antes.
+run_step() {
+    if ! "$@" >>"$BUILD_LOG" 2>&1; then
+        terr sh.buildFuse.failedLog "$BUILD_LOG"
+        tail -n 40 "$BUILD_LOG" >&2
+        exit 1
+    fi
+}
+
 # --- Build universal: una pasada por arquitectura y lipo al final ---
 build_one() {
     ARCH="$1"
+    BUILD_LOG="$BUILD_DIR/build-$ARCH.log"
+    : >"$BUILD_LOG"
     mkdir -p "build-$ARCH" && cd "build-$ARCH"
     HOSTFLAG=""
     [ "$ARCH" = "x86_64" ] && HOSTFLAG="--host=x86_64-apple-darwin"
@@ -168,21 +231,22 @@ build_one() {
         CC="clang -arch $ARCH" \
         CPPFLAGS="-D_FILE_OFFSET_BITS=64" \
         LDFLAGS="-L/usr/local/lib" \
-        ../configure --enable-fuse2fs --disable-nls --disable-uuidd --disable-fsck $HOSTFLAG >/dev/null
-        make -j"$(sysctl -n hw.ncpu)" >/dev/null
+        run_step ../configure --enable-fuse2fs --disable-nls --disable-uuidd --disable-fsck $HOSTFLAG
+        run_step make -j"$(sysctl -n hw.ncpu)"
     else
         # FUSE-T (fuse2): anular pkg-config y enlazar libfuse-t explícita.
+        # Cabeceras y libfuse sondeada por configure vía el shim (sin espacios).
         PKG_CONFIG=/usr/bin/false \
         CC="clang -arch $ARCH" \
-        CPPFLAGS="-I/usr/local/include -D_FILE_OFFSET_BITS=64" \
-        LDFLAGS="-L/usr/local/lib" \
-        ../configure --enable-fuse2fs --disable-nls --disable-uuidd --disable-fsck $HOSTFLAG >/dev/null
-        make -j"$(sysctl -n hw.ncpu)" libs >/dev/null
-        make -C misc fuse2fs \
-            LIBFUSE="/usr/local/lib/libfuse-t.dylib -Wl,-rpath,/usr/local/lib" >/dev/null
+        CPPFLAGS="-I$FUSE_T_SHIM/include -D_FILE_OFFSET_BITS=64" \
+        LDFLAGS="-L/usr/local/lib -L$FUSE_T_SHIM/lib" \
+        run_step ../configure --enable-fuse2fs --disable-nls --disable-uuidd --disable-fsck $HOSTFLAG
+        run_step make -j"$(sysctl -n hw.ncpu)" libs
+        run_step make -C misc fuse2fs \
+            LIBFUSE="/usr/local/lib/libfuse-t.dylib -Wl,-rpath,/usr/local/lib"
     fi
-    make -C e2fsck e2fsck >/dev/null
-    make -C misc mke2fs tune2fs >/dev/null
+    run_step make -C e2fsck e2fsck
+    run_step make -C misc mke2fs tune2fs
     cd ..
 }
 
