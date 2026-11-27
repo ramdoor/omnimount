@@ -85,17 +85,7 @@ public enum Formatter {
         guard getuid() == 0 else { throw FormatError.notRoot }
         let cleanLabel = try normalizeLabel(label, for: target)
 
-        // Desmontar lo que haya (nativo o FUSE).
-        if let fuseMount = Mounter.currentMountPoint(devicePath: partition.devicePath) {
-            try? Mounter.unmount(mountPoint: fuseMount)
-        } else if let derived = Mounter.derivedMountPoint(partition: partition) {
-            try? Mounter.unmount(mountPoint: derived)
-        }
-        _ = try? ShellRunner.run("/usr/sbin/diskutil", ["unmount", partition.deviceIdentifier])
-        if let stillMounted = try? DiskLister.info(for: partition.deviceIdentifier),
-           stillMounted["MountPoint"] is String {
-            throw FormatError.unmountFailed(L10n.t("error.format.stillMounted", partition.deviceIdentifier))
-        }
+        try prepareTarget(partition)
 
         let toolName: ExternalTool
         var args: [String]
@@ -131,6 +121,21 @@ public enum Formatter {
         }
 
         return L10n.t("error.format.summary", partition.deviceIdentifier, target.rawValue, cleanLabel, mbrNote)
+    }
+
+    /// Desmonta el destino con las mismas reglas que el clonado: los errores
+    /// de desmontaje o de enumeración detienen el formateo, se vuelve a
+    /// comprobar el estado tras desmontar y un montaje FUSE-T localizable solo
+    /// por etiqueta no se desmonta (el usuario lo expulsa desde la app).
+    /// `diskutil info` devuelve MountPoint vacío para un dispositivo
+    /// desmontado, así que el estado se toma de `diskutil list` y mount(8).
+    static func prepareTarget(_ partition: DiskPartition,
+                              operations: Cloner.UnmountOperations = .system) throws {
+        do {
+            try Cloner.unmountTarget(partition.deviceIdentifier, operations: operations)
+        } catch CloneError.unmountFailed(let message) {
+            throw FormatError.unmountFailed(message)
+        }
     }
 
     /// Pone el byte de tipo en la entrada MBR de la partición. Devuelve true

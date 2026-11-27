@@ -10,6 +10,18 @@ public struct CloneProgress: Sendable {
     }
 }
 
+/// Propietario que recibe la imagen creada por el helper (que corre como
+/// root). Se aplica con fchown sobre el descriptor abierto, no sobre la ruta.
+public struct ImageOwner: Sendable, Equatable {
+    public let uid: uid_t
+    public let gid: gid_t
+
+    public init(uid: uid_t, gid: gid_t) {
+        self.uid = uid
+        self.gid = gid
+    }
+}
+
 public enum CloneError: Error, LocalizedError {
     case notRoot
     case cannotOpen(String)
@@ -137,6 +149,7 @@ public enum Cloner {
 
     /// Clona un disco entero ("disk4") o una partición ("disk4s2") a un .img.
     public static func clone(wholeDisk identifier: String, to imagePath: String,
+                             owner: ImageOwner? = nil,
                              progress: (CloneProgress) -> Void) throws {
         guard getuid() == 0 else { throw CloneError.notRoot }
         let totalBytes = try diskSize(identifier)
@@ -149,6 +162,7 @@ public enum Cloner {
             throw CloneError.imageLargerThanTarget(image: totalBytes, target: free)
         }
 
+        try checkImageDestination(imagePath)
         try unmountTarget(identifier)
 
         let rawPath = "/dev/r\(identifier)"
@@ -157,13 +171,62 @@ public enum Cloner {
         }
         defer { try? input.close() }
 
-        FileManager.default.createFile(atPath: imagePath, contents: nil)
-        guard let output = FileHandle(forWritingAtPath: imagePath) else {
+        try writeImage(from: input, totalBytes: totalBytes, to: imagePath,
+                       owner: owner, progress: progress)
+    }
+
+    /// Fichero donde se escribe el clon en curso. La app consulta su tamaño
+    /// para mostrar el progreso: el nombre es exactamente `imagePath + ".partial"`.
+    public static func partialImagePath(for imagePath: String) -> String {
+        imagePath + ".partial"
+    }
+
+    /// Antes de desmontar nada: el destino debe no existir o ser un fichero
+    /// regular (se sustituye al terminar). Enlaces simbólicos, directorios y
+    /// otros tipos se rechazan sin modificarlos.
+    static func checkImageDestination(_ imagePath: String) throws {
+        var info = stat()
+        if lstat(imagePath, &info) == 0 {
+            guard (info.st_mode & S_IFMT) == S_IFREG else { throw CloneError.cannotOpen(imagePath) }
+        } else if errno != ENOENT {
             throw CloneError.cannotOpen(imagePath)
         }
-        defer { try? output.close() }
+    }
+
+    /// Escribe la imagen en `<imagePath>.partial` y la renombra a `imagePath`
+    /// solo si la copia termina. Si falla, borra el parcial y conserva la
+    /// imagen anterior, si existía. El parcial se crea con
+    /// O_CREAT|O_EXCL|O_NOFOLLOW; el propietario se aplica con fchown sobre el
+    /// descriptor (un fallo no es fatal, como el chown que hacía el helper).
+    static func writeImage(from input: FileHandle, totalBytes: Int64, to imagePath: String,
+                           owner: ImageOwner?, progress: (CloneProgress) -> Void) throws {
+        let partialPath = partialImagePath(for: imagePath)
+        // Un parcial de un clon interrumpido: unlink elimina la entrada (si es
+        // un enlace, no su destino). Si reaparece algo, O_EXCL falla.
+        var info = stat()
+        if lstat(partialPath, &info) == 0, (info.st_mode & S_IFMT) != S_IFDIR {
+            _ = unlink(partialPath)
+        }
+        let descriptor = open(partialPath, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o644)
+        guard descriptor >= 0 else { throw CloneError.cannotOpen(partialPath) }
+        let output = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        var finished = false
+        defer {
+            if !finished {
+                try? output.close()
+                _ = unlink(partialPath)
+            }
+        }
+        // Modo independiente de la umask del proceso.
+        _ = fchmod(descriptor, 0o644)
+        if let owner { _ = fchown(descriptor, owner.uid, owner.gid) }
 
         try copyStream(from: input, to: output, totalBytes: totalBytes, progress: progress)
+        try output.close()
+        guard rename(partialPath, imagePath) == 0 else {
+            throw CloneError.ioError("rename \(partialPath): \(String(cString: strerror(errno)))")
+        }
+        finished = true
     }
 
     /// Restaura una imagen .img sobre un disco o partición. DESTRUCTIVO:
@@ -173,10 +236,8 @@ public enum Cloner {
         guard getuid() == 0 else { throw CloneError.notRoot }
 
         let imageSize = try restoreImageSize(at: imagePath)
-        let targetSize = try diskSize(identifier)
-        guard imageSize <= targetSize else {
-            throw CloneError.imageLargerThanTarget(image: imageSize, target: targetSize)
-        }
+        try validateRestore(imageSize: imageSize, targetInfo: DiskLister.info(for: identifier),
+                            identifier: identifier)
 
         try unmountTarget(identifier)
 
@@ -192,6 +253,22 @@ public enum Cloner {
         defer { try? output.close() }
 
         try copyStream(from: input, to: output, totalBytes: imageSize, progress: progress)
+    }
+
+    /// Comprobaciones previas al desmontaje. Las escrituras en /dev/rdiskN
+    /// deben ser múltiplos del tamaño de bloque del dispositivo: una imagen
+    /// que no lo es fallaría en el último bloque, con el resto del destino ya
+    /// sobrescrito. Sin DeviceBlockSize se usa 512, el sector mínimo.
+    static func validateRestore(imageSize: Int64, targetInfo: [String: Any], identifier: String) throws {
+        let targetSize = try deviceSize(from: targetInfo, identifier: identifier)
+        guard imageSize <= targetSize else {
+            throw CloneError.imageLargerThanTarget(image: imageSize, target: targetSize)
+        }
+        let reported = (targetInfo["DeviceBlockSize"] as? NSNumber)?.int64Value ?? 0
+        let blockSize = reported > 0 ? reported : 512
+        guard imageSize % blockSize == 0 else {
+            throw CloneError.ioError(L10n.t("error.clone.misaligned", String(imageSize), String(blockSize)))
+        }
     }
 
     /// Rechaza una imagen vacía antes de consultar o desmontar el destino.

@@ -10,6 +10,8 @@ public enum MountError: Error, LocalizedError {
     case fsckFailed(String)
     case ext4QuotaUnsupported(String)
     case ext4NeedsRepair(String, String)
+    case alreadyMounted(device: String, mountPoint: String)
+    case mountPointInUse(String)
 
     public var errorDescription: String? {
         switch self {
@@ -31,6 +33,10 @@ public enum MountError: Error, LocalizedError {
             return L10n.t("error.mount.needsRepair", device, detail)
         case .ext4QuotaUnsupported(let device):
             return L10n.t("error.mount.quota", device)
+        case .alreadyMounted(let device, let mountPoint):
+            return L10n.t("error.mount.alreadyMounted", device, mountPoint)
+        case .mountPointInUse(let path):
+            return L10n.t("error.mount.pointInUse", path)
         }
     }
 }
@@ -63,10 +69,12 @@ public enum Mounter {
     public static var isRoot: Bool { getuid() == 0 }
 
     /// Punto de montaje por defecto: /Volumes/<etiqueta o identificador>.
+    /// "." y ".." no son nombres de directorio propios (resolverían a
+    /// /Volumes o /), así que se usa el identificador del dispositivo.
     public static func defaultMountPoint(partition: DiskPartition, detection: DetectionResult) -> String {
         var name = detection.label ?? partition.volumeName ?? partition.deviceIdentifier
         name = name.replacingOccurrences(of: "/", with: "-")
-        if name.isEmpty { name = partition.deviceIdentifier }
+        if name.isEmpty || name == "." || name == ".." { name = partition.deviceIdentifier }
         return "/Volumes/\(name)"
     }
 
@@ -100,16 +108,7 @@ public enum Mounter {
         }
         guard let toolPath = ToolLocator.find(tool) else { throw MountError.toolMissing(tool) }
 
-        // fuse2fs 1.47.3 puede recuperar el journal al abrir ext3/4, pero no
-        // usa el journal para proteger las escrituras posteriores. Conservamos
-        // e2fsck -p como comprobación previa y reparación automática segura:
-        // si requiere intervención (incluido reinicio), no se monta en escritura.
-        // Se omite en solo lectura para no modificar el sistema de ficheros.
-        if tool == .fuse2fs {
-            try preflightExtMount(devicePath: partition.devicePath,
-                                  deviceIdentifier: partition.deviceIdentifier,
-                                  readOnly: readOnly)
-        }
+        try ensureDeviceNotMounted(devicePath: partition.devicePath)
 
         let mountPoint = explicitMountPoint ?? defaultMountPoint(partition: partition, detection: detection)
         let createdMountPoint = try prepareMountPoint(mountPoint)
@@ -118,24 +117,22 @@ public enum Mounter {
             if !mounted { cleanupMountPoint(mountPoint, createdByUs: createdMountPoint) }
         }
 
-        let volname = (mountPoint as NSString).lastPathComponent
-        var options: [String]
-        switch tool {
-        case .fuse2fs:
-            // local: Finder trata el volumen como disco local.
-            // allow_other: visible para el usuario aunque monte root.
-            options = ["local", "allow_other", "volname=\(volname)"]
-        case .ntfs3g:
-            // windows_names: evita crear nombres inválidos para Windows.
-            // big_writes mejora el rendimiento de escritura.
-            options = ["local", "allow_other", "volname=\(volname)", "windows_names", "big_writes"]
-            // remove_hiberfile: monta en escritura un NTFS que Windows dejó
-            // hibernado (Inicio rápido), descartando la sesión suspendida.
-            if forceWritable { options.append("remove_hiberfile") }
-        default:
-            options = []
+        // fuse2fs 1.47.3 puede recuperar el journal al abrir ext3/4, pero no
+        // usa el journal para proteger las escrituras posteriores. Conservamos
+        // e2fsck -p como comprobación previa y reparación automática segura:
+        // si requiere intervención (incluido reinicio), no se monta en escritura.
+        // Se omite en solo lectura para no modificar el sistema de ficheros.
+        // Va después de comprobar dispositivo y punto de montaje: un montaje
+        // FUSE-T existente no aparece en mount(8) como /dev/diskN.
+        if tool == .fuse2fs {
+            try preflightExtMount(devicePath: partition.devicePath,
+                                  deviceIdentifier: partition.deviceIdentifier,
+                                  readOnly: readOnly)
         }
-        if readOnly { options.append("ro") }
+
+        let volname = (mountPoint as NSString).lastPathComponent
+        let options = fuseOptions(tool: tool, volname: volname,
+                                  readOnly: readOnly, forceWritable: forceWritable)
 
         let args = [partition.devicePath, mountPoint, "-o", options.joined(separator: ",")]
         let result = try ShellRunner.run(toolPath, args)
@@ -184,18 +181,84 @@ public enum Mounter {
         }
     }
 
+    /// Rechaza montar un dispositivo que mount(8) ya asocia a un punto de
+    /// montaje (montaje nativo de macOS o macFUSE). Consulta el estado actual,
+    /// no la instantánea de DiskPartition, que puede ser anterior a un desmontaje.
+    static func ensureDeviceNotMounted(devicePath: String,
+                                       currentMountPoint: (String) -> String? = Mounter.currentMountPoint) throws {
+        if let point = currentMountPoint(devicePath) {
+            throw MountError.alreadyMounted(device: devicePath, mountPoint: point)
+        }
+    }
+
+    /// Opciones -o para fuse2fs/ntfs-3g. El nombre de volumen procede de la
+    /// etiqueta del disco: ntfs-3g separa las opciones por comas sin escapes
+    /// y fuse_opt (libfuse/FUSE-T) trata "\" como escape del carácter
+    /// siguiente, así que "," y "\" se sustituyen por "_" y se eliminan los
+    /// caracteres de control. volname va al final para que ningún nombre
+    /// pueda absorber las opciones que le siguen.
+    static func fuseOptions(tool: ExternalTool, volname: String,
+                            readOnly: Bool, forceWritable: Bool) -> [String] {
+        var options: [String]
+        switch tool {
+        case .fuse2fs:
+            // local: Finder trata el volumen como disco local.
+            // allow_other: visible para el usuario aunque monte root.
+            options = ["local", "allow_other"]
+        case .ntfs3g:
+            // windows_names: evita crear nombres inválidos para Windows.
+            // big_writes mejora el rendimiento de escritura.
+            options = ["local", "allow_other", "windows_names", "big_writes"]
+            // remove_hiberfile: monta en escritura un NTFS que Windows dejó
+            // hibernado (Inicio rápido), descartando la sesión suspendida.
+            if forceWritable { options.append("remove_hiberfile") }
+        default:
+            return []
+        }
+        if readOnly { options.append("ro") }
+        let name = sanitizedVolumeName(volname)
+        // Sin nombre utilizable, la capa FUSE usa su nombre por defecto.
+        if !name.isEmpty { options.append("volname=\(name)") }
+        return options
+    }
+
+    static func sanitizedVolumeName(_ name: String) -> String {
+        var scalars = String.UnicodeScalarView()
+        for scalar in name.unicodeScalars {
+            switch scalar {
+            case ",", "\\": scalars.append("_")
+            case _ where scalar.properties.generalCategory == .control: continue
+            default: scalars.append(scalar)
+            }
+        }
+        return String(scalars)
+    }
+
     /// mkdir permite distinguir atómicamente un directorio creado por esta
     /// operación de otro que ya existía, incluso si aparece durante la llamada.
-    static func prepareMountPoint(_ path: String) throws -> Bool {
+    /// Un directorio existente solo se acepta si no es un enlace simbólico
+    /// (lstat) ni ya un punto de montaje: en ese caso la verificación posterior
+    /// al montaje no podría distinguir el montaje nuevo del anterior.
+    static func prepareMountPoint(_ path: String,
+                                  isMountPoint: (String) -> Bool = Mounter.isMountPoint) throws -> Bool {
         let parent = (path as NSString).deletingLastPathComponent
         if !parent.isEmpty {
             try FileManager.default.createDirectory(atPath: parent, withIntermediateDirectories: true)
         }
         if mkdir(path, 0o755) == 0 { return true }
-        let errorCode = errno
+        var errorCode = errno
         var info = stat()
-        if errorCode == EEXIST, stat(path, &info) == 0,
-           (info.st_mode & S_IFMT) == S_IFDIR { return false }
+        if errorCode == EEXIST, lstat(path, &info) == 0 {
+            switch info.st_mode & S_IFMT {
+            case S_IFDIR:
+                guard !isMountPoint(path) else { throw MountError.mountPointInUse(path) }
+                return false
+            case S_IFLNK:
+                errorCode = ELOOP
+            default:
+                break
+            }
+        }
         throw NSError(domain: NSPOSIXErrorDomain, code: Int(errorCode),
                       userInfo: [NSFilePathErrorKey: path])
     }
@@ -367,12 +430,18 @@ public enum Mounter {
     /// Busca el punto de montaje actual de un dispositivo consultando mount(8).
     public static func currentMountPoint(devicePath: String) -> String? {
         guard let result = try? ShellRunner.run("/sbin/mount", []) else { return nil }
-        for line in result.stdout.split(separator: "\n") {
-            // Formato: "/dev/disk4s1 on /Volumes/X (fuse, ...)"
-            let parts = line.components(separatedBy: " on ")
-            guard parts.count == 2, parts[0] == devicePath else { continue }
-            if let range = parts[1].range(of: " (", options: .backwards) {
-                return String(parts[1][..<range.lowerBound])
+        return mountPoint(inMountOutput: result.stdout, devicePath: devicePath)
+    }
+
+    /// Formato de cada línea: "/dev/disk4s1 on /Volumes/X (fuse, ...)". El
+    /// punto de montaje puede contener " on " o " (": se toma todo lo que
+    /// hay entre el prefijo del dispositivo y el último " (".
+    static func mountPoint(inMountOutput output: String, devicePath: String) -> String? {
+        let prefix = devicePath + " on "
+        for line in output.split(separator: "\n") where line.hasPrefix(prefix) {
+            let rest = line.dropFirst(prefix.count)
+            if let range = rest.range(of: " (", options: .backwards) {
+                return String(rest[..<range.lowerBound])
             }
         }
         return nil

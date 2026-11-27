@@ -77,10 +77,12 @@ public enum ShellRunner {
         readers.wait()
         let errData = errCapture.snapshot()
 
+        // Decodificación tolerante: un byte no UTF-8 se sustituye por U+FFFD
+        // en vez de descartar toda la salida.
         return ShellResult(
             exitCode: process.terminationStatus,
-            stdout: String(data: outData, encoding: .utf8) ?? "",
-            stderr: String(data: errData, encoding: .utf8) ?? "",
+            stdout: String(decoding: outData, as: UTF8.self),
+            stderr: String(decoding: errData, as: UTF8.self),
             terminatedBySignal: process.terminationReason == .uncaughtSignal
         )
     }

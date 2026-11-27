@@ -86,7 +86,6 @@ enum L10nTable {
         "error.format.slash": .init(en: "cannot contain '/'", es: "no puede contener '/'"),
         "error.format.extLength": .init(en: "at most 16 bytes on ext*", es: "máximo 16 bytes en ext*"),
         "error.format.fatLength": .init(en: "at most 11 characters on FAT32", es: "máximo 11 caracteres en FAT32"),
-        "error.format.stillMounted": .init(en: "%@ is still mounted", es: "%@ sigue montada"),
         "error.format.mbrType": .init(en: ", MBR type %@", es: ", tipo MBR %@"),
         "error.format.summary": .init(en: "%@ formatted as %@ «%@»%@", es: "%@ formateada como %@ «%@»%@"),
         // error.helper
@@ -313,5 +312,9 @@ enum L10nTable {
         "cli.doctor.ready": .init(en: "All set: Omnimount can mount ext2/3/4 and NTFS.", es: "Todo listo: Omnimount puede montar ext2/3/4 y NTFS."),
         "cli.doctor.noExt": .init(en: "ext2/3/4 still cannot be mounted.", es: "Aún no se puede montar ext2/3/4."),
         "cli.doctor.noNtfs": .init(en: "NTFS still cannot be mounted.", es: "Aún no se puede montar NTFS."),
+        // error.mount (comprobaciones previas al montaje)
+        "error.mount.alreadyMounted": .init(en: "%@ is already mounted at %@. Eject it first.", es: "%@ ya está montado en %@. Expúlsalo primero."),
+        "error.mount.pointInUse": .init(en: "%@ is already in use by another volume. Eject it in Finder and try again.", es: "%@ ya está en uso por otro volumen. Expúlsalo desde el Finder y vuelve a intentarlo."),
+        "error.clone.misaligned": .init(en: "The image size (%@ bytes) is not a multiple of the target's block size (%@ bytes). It is probably incomplete or not a raw disk image.", es: "El tamaño de la imagen (%@ bytes) no es múltiplo del tamaño de bloque del destino (%@ bytes). Probablemente está incompleta o no es una imagen de disco en bruto."),
     ]
 }

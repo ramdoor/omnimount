@@ -48,6 +48,19 @@ final class ShellRunnerTests: XCTestCase {
         }
     }
 
+    func testInvalidUTF8DoesNotDiscardOutput() throws {
+        // Un solo byte no UTF-8 (p. ej. una etiqueta en Latin-1 en la salida
+        // de mount) no debe vaciar el resto de la salida.
+        let result = try ShellRunner.run("/bin/sh", [
+            "-c", "printf 'ok\\377tail'; printf 'err\\377msg' >&2",
+        ])
+
+        XCTAssertTrue(result.stdout.hasPrefix("ok"), result.stdout)
+        XCTAssertTrue(result.stdout.hasSuffix("tail"), result.stdout)
+        XCTAssertTrue(result.stderr.hasPrefix("err"), result.stderr)
+        XCTAssertTrue(result.stderr.hasSuffix("msg"), result.stderr)
+    }
+
     func testDistinguishesSignalOneFromExitOne() throws {
         let exited = try ShellRunner.run("/bin/sh", ["-c", "exit 1"])
         let signaled = try ShellRunner.run("/bin/sh", ["-c", "kill -HUP $$"])
