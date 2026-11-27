@@ -70,7 +70,13 @@ final class MountController: ObservableObject {
         // ventana de 2 s, el próximo arranque lo reintenta.
         if previous != current, helper.state == .enabled {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-                self?.helper.repair()
+                guard let self else { return }
+                // Des-registrar mata el daemon: con una operación ya en curso
+                // no reparar ahora. La versión no se guarda, así que el
+                // próximo arranque lo reintenta ("Reparar helper" en
+                // Configuración sigue disponible).
+                guard !self.hasActiveOperations else { return }
+                self.helper.repair()
                 UserDefaults.standard.set(current, forKey: "lastRunVersion")
             }
         } else {
