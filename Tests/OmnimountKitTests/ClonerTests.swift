@@ -422,9 +422,9 @@ final class ClonerTests: XCTestCase {
         XCTAssertFalse(exists(original.appendingPathComponent("clone.img.partial")))
     }
 
-    func testExistingImageOfAnotherUserIsRefused() throws {
-        let shared = try folder("shared", mode: 0o777)
-        let image = try file(shared.appendingPathComponent("clone.img"), mode: 0o666)
+    func testExistingImageOfAnotherUserIsRefusedInStickyFolder() throws {
+        let sticky = try folder("sticky", mode: 0o1777)
+        let image = try file(sticky.appendingPathComponent("clone.img"), mode: 0o666)
         XCTAssertThrowsError(try writeImage(Data(repeating: 0x66, count: 4096), totalBytes: 4096,
                                             to: image, access: other)) {
             guard case CloneError.notYours(image.path) = $0 else {
@@ -432,6 +432,15 @@ final class ClonerTests: XCTestCase {
             }
         }
         XCTAssertEqual(try Data(contentsOf: image), Data(repeating: 0x5a, count: 4096))
+        XCTAssertFalse(exists(partial(image)))
+    }
+
+    func testExistingImageOfAnotherUserIsReplacedInWritableFolder() throws {
+        let shared = try folder("shared", mode: 0o777)
+        let image = try file(shared.appendingPathComponent("clone.img"), mode: 0o644)
+        let source = Data(repeating: 0x66, count: 4096)
+        try writeImage(source, totalBytes: 4096, to: image, access: other)
+        XCTAssertEqual(try Data(contentsOf: image), source)
     }
 
     func testExistingImageOfCallerIsReplaced() throws {
@@ -441,9 +450,9 @@ final class ClonerTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: image), source)
     }
 
-    func testStalePartialOfAnotherUserIsRefusedAndKept() throws {
-        let shared = try folder("shared", mode: 0o777)
-        let image = shared.appendingPathComponent("clone.img")
+    func testStalePartialOfAnotherUserIsRefusedAndKeptInStickyFolder() throws {
+        let sticky = try folder("sticky", mode: 0o1777)
+        let image = sticky.appendingPathComponent("clone.img")
         try file(partial(image), mode: 0o666, contents: Data("someone else".utf8))
         XCTAssertThrowsError(try writeImage(Data(repeating: 0x68, count: 4096), totalBytes: 4096,
                                             to: image, access: other)) {
@@ -451,6 +460,47 @@ final class ClonerTests: XCTestCase {
         }
         XCTAssertEqual(try Data(contentsOf: partial(image)), Data("someone else".utf8))
         XCTAssertFalse(exists(image))
+    }
+
+    func testStalePartialOfAnotherUserIsReplacedInWritableFolder() throws {
+        let shared = try folder("shared", mode: 0o777)
+        let image = shared.appendingPathComponent("clone.img")
+        try file(partial(image), mode: 0o644, contents: Data("earlier".utf8))
+        let source = Data(repeating: 0x68, count: 4096)
+        try writeImage(source, totalBytes: 4096, to: image, access: other)
+        XCTAssertEqual(try Data(contentsOf: image), source)
+        XCTAssertFalse(exists(partial(image)))
+    }
+
+    func testStickyFolderOwnedByCallerAllowsReplacement() throws {
+        // La carpeta (y el fichero) son del usuario que ejecuta las pruebas.
+        let sticky = try folder("own-sticky", mode: 0o1777)
+        let image = try file(sticky.appendingPathComponent("clone.img"), mode: 0o644)
+        try file(partial(image), mode: 0o644, contents: Data("earlier".utf8))
+        let source = Data(repeating: 0x6a, count: 4096)
+        try writeImage(source, totalBytes: 4096, to: image, access: me)
+        XCTAssertEqual(try Data(contentsOf: image), source)
+    }
+
+    /// Todas las combinaciones de modo de la carpeta y de propietarios.
+    func testReplaceRuleForEveryFolderMode() {
+        let caller = CallerAccess(uid: 501, gid: 20, isMember: { _ in false })
+        let root = CallerAccess(uid: 0, gid: 0, isMember: { _ in false })
+        for mode in mode_t(0)...mode_t(0o7777) {
+            let sticky = mode & S_ISVTX != 0
+            for fileOwner: uid_t in [501, 777] {
+                for folderOwner: uid_t in [501, 777] {
+                    let label = "mode \(String(mode, radix: 8)) file \(fileOwner) folder \(folderOwner)"
+                    XCTAssertEqual(caller.mayReplace(fileOwner: fileOwner, directoryMode: mode,
+                                                     directoryOwner: folderOwner, ignoresOwnership: false),
+                                   !sticky || fileOwner == 501 || folderOwner == 501, label)
+                    XCTAssertTrue(caller.mayReplace(fileOwner: fileOwner, directoryMode: mode,
+                                                    directoryOwner: folderOwner, ignoresOwnership: true), label)
+                    XCTAssertTrue(root.mayReplace(fileOwner: fileOwner, directoryMode: mode,
+                                                  directoryOwner: folderOwner, ignoresOwnership: false), label)
+                }
+            }
+        }
     }
 
     func testStalePartialOfCallerIsReplaced() throws {
