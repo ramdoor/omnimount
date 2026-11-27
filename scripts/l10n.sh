@@ -44,6 +44,7 @@ sh.makeApp.signingDev	==> Development signature: %@	==> Firma de desarrollo: %@
 sh.makeApp.created	==> Created %@	==> Creado %@
 sh.makeApp.openHint	Open it with: open "%@"	Ábrela con: open "%@"
 sh.release.usage	Usage: release.sh [--skip-notarize]	Uso: release.sh [--skip-notarize]
+sh.release.noAppcastTool	ERROR: vendor/bin/generate_appcast is missing (it ships with Sparkle). Place it there before releasing.	ERROR: falta vendor/bin/generate_appcast (se distribuye con Sparkle). Colócalo ahí antes de la release.
 sh.release.stepApp	=== 1/4 Signed app ===	=== 1/4 App firmada ===
 sh.release.needAppId	ERROR: the release requires a Developer ID Application signature.	ERROR: la release requiere firma Developer ID Application.
 sh.release.versionMismatch	ERROR: app %@ and release %@ do not match.	ERROR: app %@ y release %@ no coinciden.
