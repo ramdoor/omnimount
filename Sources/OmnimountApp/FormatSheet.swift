@@ -14,6 +14,8 @@ struct FormatSheet: View {
     @State private var label: String = ""
     @State private var confirmed = false
     @State private var working = false
+    /// Huella del dispositivo al abrir la hoja; se comprueba antes de borrar.
+    @State private var identity: DiskIdentity?
 
     private var partitionDescription: String {
         let name = partition.volumeName.map { " «\($0)»" } ?? ""
@@ -58,19 +60,32 @@ struct FormatSheet: View {
                     ProgressView().controlSize(.small)
                 }
                 Button(L10n.t("app.format.eraseButton"), role: .destructive) {
+                    guard let identity else { return }
                     working = true
                     mountController.format(partition,
                                            as: selectedFormat.rawValue,
-                                           label: label.isEmpty ? "OMNIMOUNT" : label) {
+                                           label: label.isEmpty ? "OMNIMOUNT" : label,
+                                           expected: identity) {
                         working = false
                         monitor.refresh()
                         dismiss()
                     }
                 }
-                .disabled(!confirmed || working)
+                .disabled(!confirmed || working || identity == nil)
             }
         }
         .padding(18)
         .frame(width: 420)
+        .onAppear {
+            if identity == nil { identity = DiskIdentity(partition: partition) }
+        }
+        .onReceive(monitor.$disks) { disks in
+            // Si la partición desaparece o el identificador pasa a otro
+            // dispositivo, cerrar la hoja. Durante el formateo la partición
+            // cambia legítimamente (etiqueta, remontaje): no comprobar.
+            guard !working, let identity, !identity.matches(in: disks) else { return }
+            mountController.lastMessage = L10n.t("app.alert.diskChanged", partition.deviceIdentifier)
+            dismiss()
+        }
     }
 }

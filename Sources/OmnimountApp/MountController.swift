@@ -31,6 +31,22 @@ final class MountController: ObservableObject {
     private func endOperation(on target: String) {
         busy.end(target: target)
     }
+
+    /// Comprueba que `expected` sigue apuntando al mismo dispositivo y llama a
+    /// `completion` en el hilo principal con el resultado. Sin ID de registro
+    /// IOKit hace falta un listado nuevo (diskutil), que se lee fuera del
+    /// hilo principal.
+    private func verifyIdentity(_ expected: DiskIdentity,
+                                completion: @escaping (Bool) -> Void) {
+        guard expected.needsFreshListing else {
+            completion(expected.matches(in: []))
+            return
+        }
+        Task.detached(priority: .userInitiated) {
+            let disks = (try? DiskLister.externalDisks()) ?? []
+            await MainActor.run { completion(expected.matches(in: disks)) }
+        }
+    }
     /// Partición cuyo montaje falló por cuotas ext4 internas: la UI ofrece
     /// desactivarlas con un clic (vía helper).
     @Published var quotaFixTarget: DiskPartition?
@@ -142,7 +158,11 @@ final class MountController: ObservableObject {
     }
 
     /// Restaura un .img sobre un disco o partición, con confirmación destructiva.
-    func restoreImage(identifier: String, displayName: String, completion: @escaping () -> Void) {
+    func restoreImage(disk: ExternalDisk, completion: @escaping () -> Void) {
+        let identifier = disk.deviceIdentifier
+        let displayName = disk.mediaName ?? disk.deviceIdentifier
+        // Huella del disco elegido, antes de los diálogos modales.
+        let expected = DiskIdentity(disk: disk)
         guard helper.state == .enabled else {
             lastMessage = L10n.t("app.alert.restoreNeedsHelper", identifier)
             completion(); return
@@ -169,16 +189,26 @@ final class MountController: ObservableObject {
         guard cloneLabel == nil, beginOperation(on: identifier, wholeDisk: identifier) else {
             completion(); return
         }
-
         cloneLabel = L10n.t("app.alert.restoring", url.lastPathComponent, identifier)
         cloneProgress = nil
-        helper.restore(imagePath: url.path, deviceIdentifier: identifier) { [weak self] ok, message in
+
+        verifyIdentity(expected) { [weak self] stillSame in
             guard let self else { return }
-            self.endOperation(on: identifier)
-            self.cloneLabel = nil
-            self.lastFormatSummary = ok ? L10n.t("app.alert.imageRestored", message) : nil
-            self.lastMessage = ok ? nil : message
-            completion()
+            guard stillSame else {
+                self.endOperation(on: identifier)
+                self.cloneLabel = nil
+                self.lastMessage = L10n.t("app.alert.diskChanged", identifier)
+                completion()
+                return
+            }
+            self.helper.restore(imagePath: url.path, deviceIdentifier: identifier) { [weak self] ok, message in
+                guard let self else { return }
+                self.endOperation(on: identifier)
+                self.cloneLabel = nil
+                self.lastFormatSummary = ok ? L10n.t("app.alert.imageRestored", message) : nil
+                self.lastMessage = ok ? nil : message
+                completion()
+            }
         }
     }
 
@@ -187,8 +217,10 @@ final class MountController: ObservableObject {
     @Published var lastFormatSummary: String?
 
     /// Formatea vía helper. La vista DEBE haber confirmado antes con el usuario.
+    /// `expected` es la huella tomada al abrir el diálogo: si el identificador
+    /// ya apunta a otro dispositivo, no se formatea.
     func format(_ partition: DiskPartition, as filesystem: String, label: String,
-                completion: @escaping () -> Void) {
+                expected: DiskIdentity, completion: @escaping () -> Void) {
         guard helper.state == .enabled else {
             lastMessage = L10n.t("app.alert.formatNeedsHelper")
             completion()
@@ -197,18 +229,27 @@ final class MountController: ObservableObject {
         guard beginOperation(on: partition.deviceIdentifier, wholeDisk: partition.parentWholeDisk) else {
             completion(); return
         }
-        helper.format(deviceIdentifier: partition.deviceIdentifier,
-                      filesystem: filesystem, label: label) { [weak self] ok, message in
+        verifyIdentity(expected) { [weak self] stillSame in
             guard let self else { return }
-            self.endOperation(on: partition.deviceIdentifier)
-            if ok {
-                self.lastMessage = nil
-                self.lastFormatSummary = message
-                self.monitor?.forgetOmnimountMount(deviceIdentifier: partition.deviceIdentifier)
-            } else {
-                self.lastMessage = message
+            guard stillSame else {
+                self.endOperation(on: partition.deviceIdentifier)
+                self.lastMessage = L10n.t("app.alert.diskChanged", partition.deviceIdentifier)
+                completion()
+                return
             }
-            completion()
+            self.helper.format(deviceIdentifier: partition.deviceIdentifier,
+                               filesystem: filesystem, label: label) { [weak self] ok, message in
+                guard let self else { return }
+                self.endOperation(on: partition.deviceIdentifier)
+                if ok {
+                    self.lastMessage = nil
+                    self.lastFormatSummary = message
+                    self.monitor?.forgetOmnimountMount(deviceIdentifier: partition.deviceIdentifier)
+                } else {
+                    self.lastMessage = message
+                }
+                completion()
+            }
         }
     }
 

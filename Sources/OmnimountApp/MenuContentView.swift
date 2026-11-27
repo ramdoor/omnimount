@@ -211,9 +211,7 @@ private struct DiskSection: View {
                             totalBytes: disk.size) { monitor.refresh() }
                     }
                     Button(L10n.t("app.menu.restoreDisk"), role: .destructive) {
-                        mountController.restoreImage(
-                            identifier: disk.deviceIdentifier,
-                            displayName: disk.mediaName ?? disk.deviceIdentifier) { monitor.refresh() }
+                        mountController.restoreImage(disk: disk) { monitor.refresh() }
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
