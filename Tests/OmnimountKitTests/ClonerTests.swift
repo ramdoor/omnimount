@@ -6,12 +6,21 @@ final class ClonerTests: XCTestCase {
     private var directory: URL!
 
     override func setUpWithError() throws {
-        directory = FileManager.default.temporaryDirectory
+        // En /private/tmp (no en el TMPDIR del usuario, que es 0700) para que
+        // las pruebas con otro usuario puedan atravesar las carpetas padre.
+        directory = URL(fileURLWithPath: "/private/tmp")
             .appendingPathComponent("omnimount-cloner-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        XCTAssertEqual(chmod(directory.path, 0o755), 0)
     }
 
     override func tearDownWithError() throws {
+        // Devolver permisos para poder borrar carpetas de solo lectura.
+        if let items = FileManager.default.enumerator(atPath: directory.path) {
+            for case let item as String in items {
+                _ = chmod(directory.appendingPathComponent(item).path, 0o755)
+            }
+        }
         try FileManager.default.removeItem(at: directory)
     }
 
@@ -80,7 +89,7 @@ final class ClonerTests: XCTestCase {
     func testEmptyRestoreImageIsRejectedBeforePreparingTarget() throws {
         let image = directory.appendingPathComponent("empty.img")
         try Data().write(to: image)
-        XCTAssertThrowsError(try Cloner.restoreImageSize(at: image.path)) {
+        XCTAssertThrowsError(try Cloner.openRestoreImage(image.path, access: nil)) {
             guard case CloneError.ioError = $0 else {
                 return XCTFail("Expected an I/O error, got \($0)")
             }
@@ -90,7 +99,7 @@ final class ClonerTests: XCTestCase {
     func testNonemptyRestoreImageReportsExactSize() throws {
         let image = directory.appendingPathComponent("restore.img")
         try Data(repeating: 0x42, count: 4097).write(to: image)
-        XCTAssertEqual(try Cloner.restoreImageSize(at: image.path), 4097)
+        XCTAssertEqual(try Cloner.openRestoreImage(image.path, access: nil).size, 4097)
     }
 
     // MARK: - Validación de la restauración
@@ -134,13 +143,18 @@ final class ClonerTests: XCTestCase {
     // MARK: - Escritura de la imagen
 
     private func writeImage(_ source: Data, totalBytes: Int64, to image: URL,
-                            owner: ImageOwner? = nil) throws {
+                            owner: ImageOwner? = nil, access: CallerAccess? = nil) throws {
+        let destination = try ImageDestination.open(image.path, owner: owner, access: access)
+        try writeImage(source, totalBytes: totalBytes, to: destination)
+    }
+
+    private func writeImage(_ source: Data, totalBytes: Int64, to destination: ImageDestination) throws {
         let sourceURL = directory.appendingPathComponent("raw-source")
         try source.write(to: sourceURL)
         let input = try FileHandle(forReadingFrom: sourceURL)
         defer { try? input.close() }
-        try Cloner.writeImage(from: input, totalBytes: totalBytes, to: image.path,
-                              owner: owner, progress: { _ in })
+        try destination.checkExistingImage()
+        try Cloner.writeImage(from: input, totalBytes: totalBytes, to: destination, progress: { _ in })
     }
 
     private func partial(_ image: URL) -> URL {
@@ -196,26 +210,38 @@ final class ClonerTests: XCTestCase {
         XCTAssertEqual(info.st_mode & S_IFMT, S_IFREG)
     }
 
-    func testStalePartialFileOrSymlinkIsReplacedWithoutTouchingItsTarget() throws {
+    func testStalePartialRegularFileIsReplaced() throws {
+        let image = directory.appendingPathComponent("clone.img")
+        try Data("left over".utf8).write(to: partial(image))
+        let source = Data(repeating: 0x33, count: 4096)
+        try writeImage(source, totalBytes: 4096, to: image)
+        XCTAssertEqual(try Data(contentsOf: image), source)
+        XCTAssertFalse(exists(partial(image)))
+    }
+
+    func testStalePartialSymlinkIsRefusedAndKept() throws {
         let image = directory.appendingPathComponent("clone.img")
         let target = directory.appendingPathComponent("unrelated")
         let targetContents = Data("unrelated file".utf8)
         try targetContents.write(to: target)
         try FileManager.default.createSymbolicLink(at: partial(image), withDestinationURL: target)
 
-        let source = Data(repeating: 0x33, count: 4096)
-        try writeImage(source, totalBytes: 4096, to: image)
-
-        XCTAssertEqual(try Data(contentsOf: image), source)
+        XCTAssertThrowsError(try writeImage(Data(repeating: 0x33, count: 4096), totalBytes: 4096, to: image)) {
+            guard case CloneError.stalePartial(let path) = $0 else {
+                return XCTFail("Expected stalePartial, got \($0)")
+            }
+            XCTAssertEqual(path, self.partial(image).path)
+        }
+        XCTAssertFalse(exists(image))
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: partial(image).path), target.path)
         XCTAssertEqual(try Data(contentsOf: target), targetContents)
-        XCTAssertFalse(exists(partial(image)))
     }
 
     func testImageDestinationAcceptsMissingOrRegularFile() throws {
         let image = directory.appendingPathComponent("clone.img")
-        try Cloner.checkImageDestination(image.path)
+        try ImageDestination.open(image.path, owner: nil, access: nil).checkExistingImage()
         try Data("old".utf8).write(to: image)
-        try Cloner.checkImageDestination(image.path)
+        try ImageDestination.open(image.path, owner: nil, access: nil).checkExistingImage()
     }
 
     func testImageDestinationRejectsSymlinkAndDirectory() throws {
@@ -228,13 +254,263 @@ final class ClonerTests: XCTestCase {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
 
         for path in [link.path, folder.path] {
-            XCTAssertThrowsError(try Cloner.checkImageDestination(path)) {
-                guard case CloneError.cannotOpen(path) = $0 else {
-                    return XCTFail("Expected cannotOpen(\(path)), got \($0)")
+            for access in [nil, me] as [CallerAccess?] {
+                XCTAssertThrowsError(try ImageDestination.open(path, owner: nil, access: access).checkExistingImage()) {
+                    guard case CloneError.notRegularFile(path) = $0 else {
+                        return XCTFail("Expected notRegularFile(\(path)), got \($0)")
+                    }
                 }
             }
         }
         XCTAssertEqual(try Data(contentsOf: target), contents)
+    }
+
+    // MARK: - Destino y origen con la identidad de quien lo pide
+
+    /// El usuario que ejecuta las pruebas.
+    private var me: CallerAccess {
+        CallerAccess(uid: getuid(), gid: getgid(), isMember: { _ in false })
+    }
+
+    /// Otro usuario, sin grupos en común.
+    private let other = CallerAccess(uid: 4242, gid: 4242, isMember: { _ in false })
+
+    private func folder(_ name: String, mode: mode_t, in parent: URL? = nil) throws -> URL {
+        let url = (parent ?? directory).appendingPathComponent(name)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+        XCTAssertEqual(chmod(url.path, mode), 0)
+        return url
+    }
+
+    @discardableResult
+    private func file(_ url: URL, mode: mode_t, contents: Data = Data(repeating: 0x5a, count: 4096)) throws -> URL {
+        try contents.write(to: url)
+        XCTAssertEqual(chmod(url.path, mode), 0)
+        return url
+    }
+
+    func testRootCallerUsesTheSamePathAsTheCLI() {
+        XCTAssertNil(CallerAccess(checking: ImageOwner(uid: 0, gid: 0)))
+        XCTAssertNotNil(CallerAccess(checking: ImageOwner(uid: getuid(), gid: getgid())))
+    }
+
+    func testCallerGroupsIncludePrimaryGroup() {
+        XCTAssertTrue(CallerAccess.groups(of: getuid(), primary: getgid()).contains(getgid()))
+        XCTAssertEqual(CallerAccess.groups(of: 4_000_000, primary: 4242), [4242])
+    }
+
+    /// Todas las combinaciones de modo, para propietario, miembro del grupo,
+    /// otro usuario, root y volúmenes con la propiedad ignorada.
+    func testAccessRuleForEveryMode() {
+        let needs: [CallerAccess.Need] = [.read, .write, .search, [.write, .search], [.read, .write, .search]]
+        let member = CallerAccess(uid: 501, gid: 20, isMember: { $0 == 80 })
+        let root = CallerAccess(uid: 0, gid: 0, isMember: { _ in false })
+        for mode in mode_t(0)...mode_t(0o777) {
+            for need in needs {
+                let bits = need.rawValue
+                let ownerBits = (mode >> 6) & bits == bits
+                let groupBits = (mode >> 3) & bits == bits
+                let otherBits = mode & bits == bits
+                let label = "mode \(String(mode, radix: 8)) need \(bits)"
+                // Propietario: solo cuentan sus bits.
+                XCTAssertEqual(member.permits(need, mode: mode, owner: 501, group: 0, ignoresOwnership: false),
+                               ownerBits, label)
+                // Grupo principal y grupo suplementario.
+                XCTAssertEqual(member.permits(need, mode: mode, owner: 1, group: 20, ignoresOwnership: false),
+                               groupBits, label)
+                XCTAssertEqual(member.permits(need, mode: mode, owner: 1, group: 80, ignoresOwnership: false),
+                               groupBits, label)
+                // Sin pertenencia: hacen falta los bits de grupo y los de otros.
+                XCTAssertEqual(member.permits(need, mode: mode, owner: 1, group: 99, ignoresOwnership: false),
+                               groupBits && otherBits, label)
+                XCTAssertTrue(member.permits(need, mode: mode, owner: 1, group: 99, ignoresOwnership: true), label)
+                XCTAssertTrue(root.permits(need, mode: mode, owner: 1, group: 99, ignoresOwnership: false), label)
+            }
+        }
+    }
+
+    func testDestinationRefusesFolderCallerCannotWrite() throws {
+        let readOnly = try folder("read-only", mode: 0o555)
+        let shared = try folder("shared", mode: 0o755)
+        for (url, access) in [(readOnly, me), (shared, other)] {
+            let image = url.appendingPathComponent("clone.img")
+            XCTAssertThrowsError(try ImageDestination.open(image.path, owner: nil, access: access)) {
+                guard case CloneError.folderAccess(url.path) = $0 else {
+                    return XCTFail("Expected folderAccess(\(url.path)), got \($0)")
+                }
+            }
+        }
+    }
+
+    func testDestinationRefusesFolderInsideOneCallerCannotSearch() throws {
+        let closed = try folder("closed", mode: 0o700)
+        let open = try folder("open", mode: 0o777, in: closed)
+        XCTAssertThrowsError(try ImageDestination.open(open.appendingPathComponent("clone.img").path,
+                                                       owner: nil, access: other)) {
+            guard case CloneError.folderAccess = $0 else { return XCTFail("Expected folderAccess, got \($0)") }
+        }
+        XCTAssertEqual(chmod(closed.path, 0o755), 0)
+        XCTAssertNoThrow(try ImageDestination.open(open.appendingPathComponent("clone.img").path,
+                                                   owner: nil, access: other))
+    }
+
+    func testDestinationRefusesMissingFolderAndRelativePathForCaller() {
+        for path in [directory.appendingPathComponent("missing/clone.img").path, "relative/clone.img"] {
+            XCTAssertThrowsError(try ImageDestination.open(path, owner: nil, access: me)) {
+                guard case CloneError.folderAccess = $0 else { return XCTFail("Expected folderAccess, got \($0)") }
+            }
+        }
+    }
+
+    func testDestinationRejectsEmptyAndDotNames() {
+        for path in ["", ".", "..", directory.path + "/", directory.path + "/.", directory.path + "/.."] {
+            for access in [nil, me] as [CallerAccess?] {
+                XCTAssertThrowsError(try ImageDestination.open(path, owner: nil, access: access)) {
+                    guard case CloneError.badName(path) = $0 else {
+                        return XCTFail("Expected badName(\(path)), got \($0)")
+                    }
+                }
+            }
+        }
+    }
+
+    func testDestinationResolvesSymlinkedFolderBeforeChecking() throws {
+        let readOnly = try folder("read-only", mode: 0o555)
+        let writable = try folder("writable", mode: 0o755)
+        let toReadOnly = directory.appendingPathComponent("to-read-only")
+        let toWritable = directory.appendingPathComponent("to-writable")
+        try FileManager.default.createSymbolicLink(at: toReadOnly, withDestinationURL: readOnly)
+        try FileManager.default.createSymbolicLink(at: toWritable, withDestinationURL: writable)
+
+        XCTAssertThrowsError(try ImageDestination.open(toReadOnly.appendingPathComponent("clone.img").path,
+                                                       owner: nil, access: me))
+        let source = Data(repeating: 0x44, count: 4096)
+        try writeImage(source, totalBytes: 4096, to: toWritable.appendingPathComponent("clone.img"), access: me)
+        XCTAssertEqual(try Data(contentsOf: writable.appendingPathComponent("clone.img")), source)
+    }
+
+    func testImageIsRenamedWithinOpenedFolder() throws {
+        let original = try folder("original", mode: 0o755)
+        let moved = directory.appendingPathComponent("moved")
+        let destination = try ImageDestination.open(original.appendingPathComponent("clone.img").path,
+                                                    owner: nil, access: me)
+        try FileManager.default.moveItem(at: original, to: moved)
+        try FileManager.default.createDirectory(at: original, withIntermediateDirectories: false)
+
+        let source = Data(repeating: 0x55, count: 4096)
+        try writeImage(source, totalBytes: 4096, to: destination)
+        XCTAssertEqual(try Data(contentsOf: moved.appendingPathComponent("clone.img")), source)
+        XCTAssertFalse(exists(original.appendingPathComponent("clone.img")))
+        XCTAssertFalse(exists(original.appendingPathComponent("clone.img.partial")))
+    }
+
+    func testExistingImageOfAnotherUserIsRefused() throws {
+        let shared = try folder("shared", mode: 0o777)
+        let image = try file(shared.appendingPathComponent("clone.img"), mode: 0o666)
+        XCTAssertThrowsError(try writeImage(Data(repeating: 0x66, count: 4096), totalBytes: 4096,
+                                            to: image, access: other)) {
+            guard case CloneError.notYours(image.path) = $0 else {
+                return XCTFail("Expected notYours, got \($0)")
+            }
+        }
+        XCTAssertEqual(try Data(contentsOf: image), Data(repeating: 0x5a, count: 4096))
+    }
+
+    func testExistingImageOfCallerIsReplaced() throws {
+        let image = try file(directory.appendingPathComponent("clone.img"), mode: 0o644)
+        let source = Data(repeating: 0x67, count: 4096)
+        try writeImage(source, totalBytes: 4096, to: image, access: me)
+        XCTAssertEqual(try Data(contentsOf: image), source)
+    }
+
+    func testStalePartialOfAnotherUserIsRefusedAndKept() throws {
+        let shared = try folder("shared", mode: 0o777)
+        let image = shared.appendingPathComponent("clone.img")
+        try file(partial(image), mode: 0o666, contents: Data("someone else".utf8))
+        XCTAssertThrowsError(try writeImage(Data(repeating: 0x68, count: 4096), totalBytes: 4096,
+                                            to: image, access: other)) {
+            guard case CloneError.stalePartial = $0 else { return XCTFail("Expected stalePartial, got \($0)") }
+        }
+        XCTAssertEqual(try Data(contentsOf: partial(image)), Data("someone else".utf8))
+        XCTAssertFalse(exists(image))
+    }
+
+    func testStalePartialOfCallerIsReplaced() throws {
+        let image = directory.appendingPathComponent("clone.img")
+        try file(partial(image), mode: 0o644, contents: Data("earlier".utf8))
+        let source = Data(repeating: 0x69, count: 4096)
+        try writeImage(source, totalBytes: 4096, to: image, access: me)
+        XCTAssertEqual(try Data(contentsOf: image), source)
+        XCTAssertFalse(exists(partial(image)))
+    }
+
+    func testRestoreRefusesFileCallerCannotRead() throws {
+        let image = try file(directory.appendingPathComponent("private.img"), mode: 0o600)
+        XCTAssertThrowsError(try Cloner.openRestoreImage(image.path, access: other)) {
+            guard case CloneError.readAccess(image.path) = $0 else {
+                return XCTFail("Expected readAccess, got \($0)")
+            }
+        }
+        XCTAssertEqual(try Cloner.openRestoreImage(image.path, access: me).size, 4096)
+        XCTAssertEqual(chmod(image.path, 0o644), 0)
+        XCTAssertEqual(try Cloner.openRestoreImage(image.path, access: other).size, 4096)
+    }
+
+    func testRestoreRefusesFileInsideFolderCallerCannotSearch() throws {
+        let closed = try folder("closed", mode: 0o700)
+        let image = try file(closed.appendingPathComponent("disk.img"), mode: 0o644)
+        XCTAssertThrowsError(try Cloner.openRestoreImage(image.path, access: other)) {
+            guard case CloneError.readAccess = $0 else { return XCTFail("Expected readAccess, got \($0)") }
+        }
+    }
+
+    func testRestoreReportsMissingImage() {
+        let missing = directory.appendingPathComponent("missing.img").path
+        XCTAssertThrowsError(try Cloner.openRestoreImage(missing, access: me)) {
+            guard case CloneError.readAccess(missing) = $0 else { return XCTFail("Expected readAccess, got \($0)") }
+        }
+        XCTAssertThrowsError(try Cloner.openRestoreImage(missing, access: nil)) {
+            guard case CloneError.cannotOpen(missing) = $0 else { return XCTFail("Expected cannotOpen, got \($0)") }
+        }
+    }
+
+    func testRestoreSizeAndDataComeFromOpenedDescriptor() throws {
+        let image = try file(directory.appendingPathComponent("disk.img"), mode: 0o644,
+                             contents: Data(repeating: 0x71, count: 4096))
+        for access in [nil, me] as [CallerAccess?] {
+            let opened = try Cloner.openRestoreImage(image.path, access: access)
+            let replacement = directory.appendingPathComponent("replacement")
+            try Data(repeating: 0x72, count: 8192).write(to: replacement)
+            XCTAssertEqual(rename(replacement.path, image.path), 0)
+            XCTAssertEqual(opened.size, 4096)
+            XCTAssertEqual(try opened.handle.readToEnd(), Data(repeating: 0x71, count: 4096))
+            try opened.handle.close()
+            try Data(repeating: 0x71, count: 4096).write(to: image)
+        }
+    }
+
+    func testRestoreRefusesFifoAndFolderWithoutBlocking() throws {
+        let fifo = directory.appendingPathComponent("pipe.img")
+        XCTAssertEqual(mkfifo(fifo.path, 0o644), 0)
+        let folderImage = try folder("folder.img", mode: 0o755)
+        for path in [fifo.path, folderImage.path] {
+            for access in [nil, me] as [CallerAccess?] {
+                XCTAssertThrowsError(try Cloner.openRestoreImage(path, access: access)) {
+                    guard case CloneError.notRegularFile(path) = $0 else {
+                        return XCTFail("Expected notRegularFile(\(path)), got \($0)")
+                    }
+                }
+            }
+        }
+    }
+
+    func testRestoreFollowsSymlinkToReadableImage() throws {
+        let image = try file(directory.appendingPathComponent("disk.img"), mode: 0o600)
+        let link = directory.appendingPathComponent("link.img")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: image)
+        XCTAssertEqual(try Cloner.openRestoreImage(link.path, access: me).size, 4096)
+        XCTAssertEqual(try Cloner.openRestoreImage(link.path, access: nil).size, 4096)
+        XCTAssertThrowsError(try Cloner.openRestoreImage(link.path, access: other))
     }
 
     private func disk(mountPoint: String? = nil) -> ExternalDisk {
