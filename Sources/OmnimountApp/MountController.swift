@@ -134,16 +134,16 @@ final class MountController: ObservableObject {
         cloneLabel = L10n.t("app.alert.cloning", identifier, url.lastPathComponent)
         cloneProgress = 0
         let path = url.path
-        // El clonado puede escribir primero en "<imagen>.partial" y renombrar
-        // al terminar: sondear ese fichero y, si no existe, la ruta final.
-        let partialPath = path + ".partial"
+        // El clonado escribe en "<imagen>.partial" y lo renombra al terminar.
+        // Solo se sondea ese fichero: la ruta final puede ser una imagen
+        // antigua que se va a sobrescribir. Mientras no existe (antes de
+        // crearlo, o ya renombrado) el progreso no cambia; empieza en 0.
+        let partialPath = Cloner.partialImagePath(for: path)
         cloneTimer?.invalidate()
         cloneTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            guard let self, totalBytes > 0 else { return }
-            let size: (String) -> Int64? = {
-                (try? FileManager.default.attributesOfItem(atPath: $0))?[.size] as? Int64
-            }
-            let written = size(partialPath) ?? size(path) ?? 0
+            guard let self, totalBytes > 0,
+                  let written = (try? FileManager.default.attributesOfItem(atPath: partialPath))?[.size] as? Int64
+            else { return }
             Task { @MainActor in self.cloneProgress = min(1, Double(written) / Double(totalBytes)) }
         }
         helper.clone(deviceIdentifier: identifier, imagePath: path) { [weak self] ok, message in
