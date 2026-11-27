@@ -29,6 +29,16 @@ public enum CloneError: Error, LocalizedError {
     case imageLargerThanTarget(image: Int64, target: Int64)
     case unmountFailed(String)
     case ioError(String)
+    /// El usuario que lo pide no puede crear ficheros en esa carpeta.
+    case folderAccess(String)
+    /// Ya existe un fichero con ese nombre y no es del usuario que lo pide.
+    case notYours(String)
+    /// Hay un `.partial` que no es un fichero del usuario que lo pide.
+    case stalePartial(String)
+    /// El usuario que lo pide no puede leer la imagen (o no existe).
+    case readAccess(String)
+    case notRegularFile(String)
+    case badName(String)
 
     public var errorDescription: String? {
         switch self {
@@ -45,6 +55,18 @@ public enum CloneError: Error, LocalizedError {
             return L10n.t("error.clone.unmount", message)
         case .ioError(let message):
             return L10n.t("error.clone.io", message)
+        case .folderAccess(let path):
+            return L10n.t("error.clone.folderAccess", path)
+        case .notYours(let path):
+            return L10n.t("error.clone.notYours", path)
+        case .stalePartial(let path):
+            return L10n.t("error.clone.stalePartial", path)
+        case .readAccess(let path):
+            return L10n.t("error.clone.readAccess", path)
+        case .notRegularFile(let path):
+            return L10n.t("error.clone.notFile", path)
+        case .badName(let path):
+            return L10n.t("error.clone.badName", path)
         }
     }
 }
@@ -154,15 +176,14 @@ public enum Cloner {
         guard getuid() == 0 else { throw CloneError.notRoot }
         let totalBytes = try diskSize(identifier)
 
+        // Todas las comprobaciones del destino, ANTES de desmontar nada.
+        let destination = try ImageDestination.open(imagePath, owner: owner,
+                                                    access: owner.flatMap(CallerAccess.init(checking:)))
         // Comprobar espacio en destino ANTES de pasar una hora copiando.
-        let destDir = (imagePath as NSString).deletingLastPathComponent
-        if let attrs = try? FileManager.default.attributesOfFileSystem(forPath: destDir.isEmpty ? "." : destDir),
-           let free = (attrs[.systemFreeSize] as? NSNumber)?.int64Value,
-           free < totalBytes {
+        if let free = destination.freeBytes(), free < totalBytes {
             throw CloneError.imageLargerThanTarget(image: totalBytes, target: free)
         }
-
-        try checkImageDestination(imagePath)
+        try destination.checkExistingImage()
         try unmountTarget(identifier)
 
         let rawPath = "/dev/r\(identifier)"
@@ -171,8 +192,7 @@ public enum Cloner {
         }
         defer { try? input.close() }
 
-        try writeImage(from: input, totalBytes: totalBytes, to: imagePath,
-                       owner: owner, progress: progress)
+        try writeImage(from: input, totalBytes: totalBytes, to: destination, progress: progress)
     }
 
     /// Fichero donde se escribe el clon en curso. La app consulta su tamaño
@@ -181,70 +201,41 @@ public enum Cloner {
         imagePath + ".partial"
     }
 
-    /// Antes de desmontar nada: el destino debe no existir o ser un fichero
-    /// regular (se sustituye al terminar). Enlaces simbólicos, directorios y
-    /// otros tipos se rechazan sin modificarlos.
-    static func checkImageDestination(_ imagePath: String) throws {
-        var info = stat()
-        if lstat(imagePath, &info) == 0 {
-            guard (info.st_mode & S_IFMT) == S_IFREG else { throw CloneError.cannotOpen(imagePath) }
-        } else if errno != ENOENT {
-            throw CloneError.cannotOpen(imagePath)
-        }
-    }
-
     /// Escribe la imagen en `<imagePath>.partial` y la renombra a `imagePath`
     /// solo si la copia termina. Si falla, borra el parcial y conserva la
-    /// imagen anterior, si existía. El parcial se crea con
-    /// O_CREAT|O_EXCL|O_NOFOLLOW; el propietario se aplica con fchown sobre el
-    /// descriptor (un fallo no es fatal, como el chown que hacía el helper).
-    static func writeImage(from input: FileHandle, totalBytes: Int64, to imagePath: String,
-                           owner: ImageOwner?, progress: (CloneProgress) -> Void) throws {
-        let partialPath = partialImagePath(for: imagePath)
-        // Un parcial de un clon interrumpido: unlink elimina la entrada (si es
-        // un enlace, no su destino). Si reaparece algo, O_EXCL falla.
-        var info = stat()
-        if lstat(partialPath, &info) == 0, (info.st_mode & S_IFMT) != S_IFDIR {
-            _ = unlink(partialPath)
-        }
-        let descriptor = open(partialPath, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o644)
-        guard descriptor >= 0 else { throw CloneError.cannotOpen(partialPath) }
-        let output = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+    /// imagen anterior, si existía. Todo es relativo al directorio abierto.
+    static func writeImage(from input: FileHandle, totalBytes: Int64, to destination: ImageDestination,
+                           progress: (CloneProgress) -> Void) throws {
+        let output = try destination.createPartial()
         var finished = false
         defer {
             if !finished {
                 try? output.close()
-                _ = unlink(partialPath)
+                destination.removePartial()
             }
         }
-        // Modo independiente de la umask del proceso.
-        _ = fchmod(descriptor, 0o644)
-        if let owner { _ = fchown(descriptor, owner.uid, owner.gid) }
-
         try copyStream(from: input, to: output, totalBytes: totalBytes, progress: progress)
         try output.close()
-        guard rename(partialPath, imagePath) == 0 else {
-            throw CloneError.ioError("rename \(partialPath): \(String(cString: strerror(errno)))")
-        }
+        try destination.commit()
         finished = true
     }
 
     /// Restaura una imagen .img sobre un disco o partición. DESTRUCTIVO:
     /// sobrescribe el destino. El llamante es responsable de pedir confirmación.
+    /// `requestedBy`: usuario en cuyo nombre actúa el helper; la imagen debe
+    /// poder leerla él mismo. nil (CLI bajo sudo) = sin comprobaciones extra.
     public static func restore(imagePath: String, to identifier: String,
+                               requestedBy caller: ImageOwner? = nil,
                                progress: (CloneProgress) -> Void) throws {
         guard getuid() == 0 else { throw CloneError.notRoot }
 
-        let imageSize = try restoreImageSize(at: imagePath)
-        try validateRestore(imageSize: imageSize, targetInfo: DiskLister.info(for: identifier),
+        // Un único descriptor para el tamaño y para la lectura.
+        let image = try openRestoreImage(imagePath, access: caller.flatMap(CallerAccess.init(checking:)))
+        defer { try? image.handle.close() }
+        try validateRestore(imageSize: image.size, targetInfo: DiskLister.info(for: identifier),
                             identifier: identifier)
 
         try unmountTarget(identifier)
-
-        guard let input = FileHandle(forReadingAtPath: imagePath) else {
-            throw CloneError.cannotOpen(imagePath)
-        }
-        defer { try? input.close() }
 
         let rawPath = "/dev/r\(identifier)"
         guard let output = FileHandle(forWritingAtPath: rawPath) else {
@@ -252,7 +243,7 @@ public enum Cloner {
         }
         defer { try? output.close() }
 
-        try copyStream(from: input, to: output, totalBytes: imageSize, progress: progress)
+        try copyStream(from: image.handle, to: output, totalBytes: image.size, progress: progress)
     }
 
     /// Comprobaciones previas al desmontaje. Las escrituras en /dev/rdiskN
@@ -271,16 +262,45 @@ public enum Cloner {
         }
     }
 
-    /// Rechaza una imagen vacía antes de consultar o desmontar el destino.
-    static func restoreImageSize(at imagePath: String) throws -> Int64 {
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: imagePath),
-              let imageSize = (attrs[.size] as? NSNumber)?.int64Value else {
+    /// Abre la imagen a restaurar. Con `access`, la ruta se resuelve
+    /// (realpath) y se recorre desde "/" comprobando que el usuario puede
+    /// atravesar cada carpeta y leer el fichero; los enlaces simbólicos se
+    /// siguen, pero se comprueba cada componente de la ruta resuelta. Rechaza
+    /// lo que no sea un fichero regular y una imagen vacía antes de consultar
+    /// o desmontar el destino.
+    static func openRestoreImage(_ imagePath: String,
+                                 access: CallerAccess?) throws -> (handle: FileHandle, size: Int64) {
+        let flags = O_RDONLY | O_NONBLOCK | O_NOCTTY | O_CLOEXEC
+        let descriptor: Int32
+        var ignoresOwnership = false
+        if let access {
+            guard let canonical = PathWalk.canonicalPath(imagePath),
+                  let split = PathWalk.split(canonical),
+                  let parent = PathWalk.openDirectory(split.directory, access: access, need: .search) else {
+                throw CloneError.readAccess(imagePath)
+            }
+            defer { close(parent.descriptor) }
+            descriptor = openat(parent.descriptor, split.name, flags | O_NOFOLLOW)
+            guard descriptor >= 0 else { throw CloneError.readAccess(imagePath) }
+            ignoresOwnership = PathWalk.ignoresOwnership(descriptor)
+        } else {
+            descriptor = open(imagePath, flags)
+            guard descriptor >= 0 else { throw CloneError.cannotOpen(imagePath) }
+        }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        var info = stat()
+        guard fstat(descriptor, &info) == 0 else { throw CloneError.cannotOpen(imagePath) }
+        guard (info.st_mode & S_IFMT) == S_IFREG else { throw CloneError.notRegularFile(imagePath) }
+        if let access, !access.permits(.read, info, ignoresOwnership: ignoresOwnership) {
+            throw CloneError.readAccess(imagePath)
+        }
+        guard info.st_size > 0 else { throw CloneError.ioError(L10n.t("error.clone.empty")) }
+        // O_NONBLOCK solo evitaba bloquearse al abrir algo que no fuera un fichero.
+        let current = fcntl(descriptor, F_GETFL)
+        guard current >= 0, fcntl(descriptor, F_SETFL, current & ~O_NONBLOCK) == 0 else {
             throw CloneError.cannotOpen(imagePath)
         }
-        guard imageSize > 0 else {
-            throw CloneError.ioError(L10n.t("error.clone.empty"))
-        }
-        return imageSize
+        return (handle, Int64(info.st_size))
     }
 
     static func copyStream(from input: FileHandle, to output: FileHandle,
@@ -334,5 +354,243 @@ public enum Cloner {
             totalBytes: totalBytes,
             bytesPerSecond: elapsed > 0 ? Double(copied) / elapsed : 0
         ))
+    }
+}
+
+/// Permisos del usuario en cuyo nombre actúa el helper, calculados con los
+/// bits de modo (propietario, grupo, otros). Las ACL no se evalúan: un
+/// acceso concedido solo por ACL se rechaza.
+struct CallerAccess {
+    struct Need: OptionSet {
+        let rawValue: mode_t
+        static let read = Need(rawValue: 4)
+        static let write = Need(rawValue: 2)
+        static let search = Need(rawValue: 1)
+    }
+
+    let uid: uid_t
+    let gid: gid_t
+    let isMember: (gid_t) -> Bool
+
+    init(uid: uid_t, gid: gid_t, isMember: @escaping (gid_t) -> Bool) {
+        self.uid = uid
+        self.gid = gid
+        self.isMember = isMember
+    }
+
+    /// nil para root: actúa como el CLI bajo sudo, sin comprobaciones extra.
+    init?(checking owner: ImageOwner) {
+        guard owner.uid != 0 else { return nil }
+        let groups = Self.groups(of: owner.uid, primary: owner.gid)
+        self.init(uid: owner.uid, gid: owner.gid, isMember: { groups.contains($0) })
+    }
+
+    /// Regla: root o un volumen con la propiedad ignorada → sí. Propietario
+    /// → bits de propietario. Resto → bits de grupo, y además pertenecer al
+    /// grupo o que los bits de otros también lo permitan (conservador: un
+    /// modo como 0604 no da acceso por una pertenencia no detectada).
+    func permits(_ need: Need, mode: mode_t, owner: uid_t, group: gid_t, ignoresOwnership: Bool) -> Bool {
+        if uid == 0 || ignoresOwnership { return true }
+        let bits = need.rawValue
+        if owner == uid { return (mode >> 6) & bits == bits }
+        guard (mode >> 3) & bits == bits else { return false }
+        return group == gid || isMember(group) || mode & bits == bits
+    }
+
+    func permits(_ need: Need, _ info: stat, ignoresOwnership: Bool) -> Bool {
+        permits(need, mode: info.st_mode, owner: info.st_uid, group: info.st_gid,
+                ignoresOwnership: ignoresOwnership)
+    }
+
+    /// Grupos del usuario según el directorio (getgrouplist) más el principal.
+    static func groups(of uid: uid_t, primary: gid_t) -> Set<gid_t> {
+        var result: Set<gid_t> = [primary]
+        var record = passwd()
+        var found: UnsafeMutablePointer<passwd>?
+        var buffer = [CChar](repeating: 0, count: 16 * 1024)
+        guard getpwuid_r(uid, &record, &buffer, buffer.count, &found) == 0,
+              found != nil, let name = record.pw_name else { return result }
+        var count: Int32 = 64
+        while count <= 65_536 {
+            var list = [Int32](repeating: 0, count: Int(count))
+            var size = count
+            if getgrouplist(name, Int32(bitPattern: primary), &list, &size) == 0 {
+                list.prefix(Int(size)).forEach { result.insert(gid_t(bitPattern: $0)) }
+                break
+            }
+            count *= 4
+        }
+        return result
+    }
+}
+
+/// Recorrido de rutas con descriptores, comprobando los permisos del
+/// usuario en cada carpeta.
+enum PathWalk {
+    static func canonicalPath(_ path: String) -> String? {
+        guard path.hasPrefix("/"), let resolved = realpath(path, nil) else { return nil }
+        defer { free(resolved) }
+        return String(cString: resolved)
+    }
+
+    /// "/a/b/c" → ("/a/b", "c"). nil si el último componente no es un nombre
+    /// de fichero (vacío, "." o "..").
+    static func split(_ path: String) -> (directory: String, name: String)? {
+        guard let slash = path.lastIndex(of: "/") else {
+            return isFileName(path) ? (".", path) : nil
+        }
+        let name = String(path[path.index(after: slash)...])
+        guard isFileName(name) else { return nil }
+        let directory = String(path[..<slash])
+        return (directory.isEmpty ? "/" : directory, name)
+    }
+
+    static func isFileName(_ name: String) -> Bool {
+        !name.isEmpty && name != "." && name != ".." && !name.contains("/")
+    }
+
+    static func ignoresOwnership(_ descriptor: Int32) -> Bool {
+        var info = statfs()
+        return fstatfs(descriptor, &info) == 0 && (info.f_flags & UInt32(MNT_IGNORE_OWNERSHIP)) != 0
+    }
+
+    private static func permits(_ descriptor: Int32, _ need: CallerAccess.Need, _ access: CallerAccess) -> Bool {
+        var info = stat()
+        guard fstat(descriptor, &info) == 0, (info.st_mode & S_IFMT) == S_IFDIR else { return false }
+        return access.permits(need, info, ignoresOwnership: ignoresOwnership(descriptor))
+    }
+
+    /// Abre `path` (absoluto) desde "/", componente a componente sin seguir
+    /// enlaces, exigiendo búsqueda en cada carpeta y `need` en la última.
+    /// Pensado para rutas ya resueltas con `canonicalPath`.
+    static func openDirectory(_ path: String, access: CallerAccess,
+                              need: CallerAccess.Need) -> (descriptor: Int32, ignoresOwnership: Bool)? {
+        guard path.hasPrefix("/") else { return nil }
+        var current = open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC)
+        guard current >= 0 else { return nil }
+        for component in path.split(separator: "/") {
+            guard component != ".", component != "..",
+                  permits(current, .search, access) else {
+                close(current)
+                return nil
+            }
+            let next = openat(current, String(component), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            close(current)
+            guard next >= 0 else { return nil }
+            current = next
+        }
+        guard permits(current, need.union(.search), access) else {
+            close(current)
+            return nil
+        }
+        return (current, ignoresOwnership(current))
+    }
+}
+
+/// Destino de un clon: la carpeta se abre una vez y el resto de pasos
+/// (comprobar, crear el parcial, borrar, renombrar) son relativos a ella.
+/// Con `access` (helper), la carpeta debe permitir escribir al usuario y los
+/// ficheros existentes que se sustituyen deben ser suyos.
+final class ImageDestination {
+    let directory: Int32
+    let name: String
+    let imagePath: String
+    let owner: ImageOwner?
+    private let access: CallerAccess?
+    private let ignoresOwnership: Bool
+
+    var partialName: String { name + ".partial" }
+    var partialPath: String { Cloner.partialImagePath(for: imagePath) }
+
+    private init(directory: Int32, name: String, imagePath: String, owner: ImageOwner?,
+                 access: CallerAccess?, ignoresOwnership: Bool) {
+        self.directory = directory
+        self.name = name
+        self.imagePath = imagePath
+        self.owner = owner
+        self.access = access
+        self.ignoresOwnership = ignoresOwnership
+    }
+
+    deinit { close(directory) }
+
+    static func open(_ imagePath: String, owner: ImageOwner?, access: CallerAccess?) throws -> ImageDestination {
+        guard let split = PathWalk.split(imagePath) else { throw CloneError.badName(imagePath) }
+        if let access {
+            guard let canonical = PathWalk.canonicalPath(split.directory),
+                  let opened = PathWalk.openDirectory(canonical, access: access, need: .write) else {
+                throw CloneError.folderAccess(split.directory)
+            }
+            return ImageDestination(directory: opened.descriptor, name: split.name, imagePath: imagePath,
+                                    owner: owner, access: access, ignoresOwnership: opened.ignoresOwnership)
+        }
+        let descriptor = Darwin.open(split.directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC)
+        guard descriptor >= 0 else { throw CloneError.cannotOpen(imagePath) }
+        return ImageDestination(directory: descriptor, name: split.name, imagePath: imagePath,
+                                owner: owner, access: nil, ignoresOwnership: false)
+    }
+
+    func freeBytes() -> Int64? {
+        var info = statfs()
+        guard fstatfs(directory, &info) == 0 else { return nil }
+        return Int64(info.f_bavail) * Int64(info.f_bsize)
+    }
+
+    /// Con `access`, un fichero existente solo se sustituye si es del usuario
+    /// (salvo en volúmenes con la propiedad ignorada).
+    private func belongsToCaller(_ info: stat) -> Bool {
+        guard let access else { return true }
+        return ignoresOwnership || info.st_uid == access.uid
+    }
+
+    /// El destino debe no existir o ser un fichero regular (se sustituye al
+    /// terminar). Enlaces simbólicos, directorios y otros tipos se rechazan
+    /// sin modificarlos.
+    func checkExistingImage() throws {
+        var info = stat()
+        if fstatat(directory, name, &info, AT_SYMLINK_NOFOLLOW) == 0 {
+            guard (info.st_mode & S_IFMT) == S_IFREG else { throw CloneError.notRegularFile(imagePath) }
+            guard belongsToCaller(info) else { throw CloneError.notYours(imagePath) }
+        } else if errno != ENOENT {
+            throw access == nil ? CloneError.cannotOpen(imagePath) : CloneError.folderAccess(imagePath)
+        }
+    }
+
+    /// Crea el parcial con O_CREAT|O_EXCL|O_NOFOLLOW. Un parcial previo solo
+    /// se borra si es un fichero regular (del usuario, con `access`).
+    func createPartial() throws -> FileHandle {
+        var info = stat()
+        if fstatat(directory, partialName, &info, AT_SYMLINK_NOFOLLOW) == 0 {
+            guard (info.st_mode & S_IFMT) == S_IFREG, belongsToCaller(info) else {
+                throw CloneError.stalePartial(partialPath)
+            }
+            guard unlinkat(directory, partialName, 0) == 0 || errno == ENOENT else {
+                throw CloneError.stalePartial(partialPath)
+            }
+        }
+        let descriptor = openat(directory, partialName,
+                                O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o644)
+        guard descriptor >= 0 else {
+            if errno == EEXIST { throw CloneError.stalePartial(partialPath) }
+            throw access == nil ? CloneError.cannotOpen(partialPath)
+                : CloneError.folderAccess((imagePath as NSString).deletingLastPathComponent)
+        }
+        // Modo independiente de la umask del proceso; el propietario se aplica
+        // sobre el descriptor (un fallo no es fatal).
+        _ = fchmod(descriptor, 0o644)
+        if let owner { _ = fchown(descriptor, owner.uid, owner.gid) }
+        return FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+    }
+
+    func removePartial() {
+        _ = unlinkat(directory, partialName, 0)
+    }
+
+    /// Sustituye el destino por el parcial, tras volver a comprobarlo.
+    func commit() throws {
+        try checkExistingImage()
+        guard renameat(directory, partialName, directory, name) == 0 else {
+            throw CloneError.ioError("rename \(partialPath): \(String(cString: strerror(errno)))")
+        }
     }
 }

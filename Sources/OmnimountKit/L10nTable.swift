@@ -102,6 +102,14 @@ enum L10nTable {
         "error.helper.notResponding": .init(en: "The helper is not responding: %@", es: "El helper no responde: %@"),
         "error.helper.noProxy": .init(en: "Could not create the XPC proxy.", es: "No se pudo crear el proxy XPC."),
         "error.helper.timeout": .init(en: "The helper did not respond in time.", es: "El helper no respondió a tiempo."),
+        // helper: operación en curso, destino y origen de las imágenes
+        "error.helper.busy": .init(en: "%@ already has an operation in progress. Wait for it to finish and try again.", es: "%@ ya tiene una operación en curso. Espera a que termine y vuelve a intentarlo."),
+        "error.clone.folderAccess": .init(en: "You cannot create files in %@, or the folder does not exist. Choose a folder of yours.", es: "No puedes crear archivos en %@ o la carpeta no existe. Elige una carpeta tuya."),
+        "error.clone.notYours": .init(en: "%@ already exists and does not belong to you. Choose another name.", es: "%@ ya existe y no te pertenece. Elige otro nombre."),
+        "error.clone.stalePartial": .init(en: "%@ already exists and is not a file of yours from an earlier clone. Delete it or choose another name.", es: "%@ ya existe y no es un archivo tuyo de un clonado anterior. Bórralo o elige otro nombre."),
+        "error.clone.readAccess": .init(en: "You cannot read %@, or it does not exist.", es: "No puedes leer %@ o no existe."),
+        "error.clone.notFile": .init(en: "%@ is not a regular file.", es: "%@ no es un archivo normal."),
+        "error.clone.badName": .init(en: "%@ is not a valid name for an image file.", es: "%@ no es un nombre válido para un archivo de imagen."),
         // disk.list
         "disk.list.empty": .init(en: "No external disks connected.", es: "No hay discos externos conectados."),
         // app.menu
