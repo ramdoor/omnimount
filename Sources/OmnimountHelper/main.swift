@@ -15,18 +15,39 @@ private let log = Logger(subsystem: "org.omnimount.helper", category: "xpc")
 /// compartida por todas las conexiones.
 private let diskGate = DiskOperationGate()
 
+/// Cuenta las peticiones atendidas en una conexión (solo para el registro).
+final class RequestCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    func note() {
+        lock.lock()
+        count += 1
+        lock.unlock()
+    }
+
+    var isEmpty: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return count == 0
+    }
+}
+
 /// Implementación de las operaciones. Corre como root, así que usa
 /// OmnimountKit directamente — el mismo código que el CLI bajo sudo. Hay un
 /// objeto por conexión: `caller` es el usuario del proceso que se conectó,
 /// en cuyo nombre se crean y leen las imágenes.
 final class HelperService: NSObject, OmnimountHelperProtocol {
     private let caller: ImageOwner
+    private let requests: RequestCounter
 
-    init(caller: ImageOwner) {
+    init(caller: ImageOwner, requests: RequestCounter) {
         self.caller = caller
+        self.requests = requests
     }
 
     func version(reply: @escaping (String) -> Void) {
+        requests.note()
         reply(HelperConstants.protocolVersion)
     }
 
@@ -42,6 +63,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
 
     func detect(deviceIdentifier: String,
                 reply: @escaping (Bool, String, String?) -> Void) {
+        requests.note()
         do {
             let part = try partition(for: deviceIdentifier)
             let detection = try FilesystemDetector.detect(devicePath: part.devicePath)
@@ -53,6 +75,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
 
     func mount(deviceIdentifier: String, readOnly: Bool,
                reply: @escaping (Bool, String) -> Void) {
+        requests.note()
         do {
             let result = try diskGate.run(on: deviceIdentifier) {
                 let part = try partition(for: deviceIdentifier)
@@ -68,6 +91,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
     /// Solo por identificador de una partición externa: el punto de montaje
     /// se obtiene del propio disco.
     func unmount(target: String, reply: @escaping (Bool, String) -> Void) {
+        requests.note()
         do {
             let unmounted: String? = try diskGate.run(on: target) {
                 let part = try partition(for: target)
@@ -92,6 +116,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
 
     func clone(deviceIdentifier: String, imagePath: String,
                reply: @escaping (Bool, String) -> Void) {
+        requests.note()
         do {
             // La imagen se crea en nombre del usuario que lo pide y queda a su nombre.
             try diskGate.run(on: deviceIdentifier) {
@@ -105,6 +130,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
 
     func restore(imagePath: String, deviceIdentifier: String,
                  reply: @escaping (Bool, String) -> Void) {
+        requests.note()
         do {
             // La imagen debe poder leerla el propio usuario que lo pide.
             try diskGate.run(on: deviceIdentifier) {
@@ -119,6 +145,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
 
     func makeWritable(deviceIdentifier: String,
                       reply: @escaping (Bool, String) -> Void) {
+        requests.note()
         do {
             let result = try diskGate.run(on: deviceIdentifier) {
                 let part = try partition(for: deviceIdentifier)
@@ -133,6 +160,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
 
     func fixQuota(deviceIdentifier: String,
                   reply: @escaping (Bool, String) -> Void) {
+        requests.note()
         do {
             let changed = try diskGate.run(on: deviceIdentifier) { () -> Bool in
                 let part = try partition(for: deviceIdentifier)
@@ -149,6 +177,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
 
     func format(deviceIdentifier: String, filesystem: String, label: String,
                 reply: @escaping (Bool, String) -> Void) {
+        requests.note()
         guard let target = TargetFormat(rawValue: filesystem) else {
             reply(false, L10n.t("error.format.unknown", filesystem))
             return
@@ -165,6 +194,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
     }
 
     func checkFullDiskAccess(reply: @escaping (Bool) -> Void) {
+        requests.note()
         // La base de datos TCC del sistema solo es legible con Acceso total
         // al disco: el intento de lectura es el autotest perfecto (incluso
         // siendo root).
@@ -184,54 +214,90 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
     }
 }
 
-/// Acepta solo conexiones de procesos firmados con nuestro mismo Team ID.
+/// Clientes aceptados: la app y el cliente de pruebas de integración,
+/// firmados con el mismo Team ID que este helper (HelperClientRequirement).
+/// El sistema aplica el requisito a cada mensaje con el audit token del
+/// cliente (setCodeSigningRequirement); la comprobación previa por PID solo
+/// sirve para rechazar pronto y registrar el motivo.
 enum ClientVerifier {
-    static func isTrusted(_ connection: NSXPCConnection) -> Bool {
-        // Nota: la verificación por PID tiene una ventana de carrera teórica;
-        // la alternativa robusta (audit token) es API privada. Suficiente v1:
-        // el atacante necesitaría ya ejecución local con nuestro mismo uid.
-        var code: SecCode?
-        let attrs = [kSecGuestAttributePid: connection.processIdentifier] as CFDictionary
-        guard SecCodeCopyGuestWithAttributes(nil, attrs, [], &code) == errSecSuccess,
-              let code else { return false }
-
-        var staticCode: SecStaticCode?
-        guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess,
-              let staticCode else { return false }
-
-        guard let selfTeam = currentTeamIdentifier(), !selfTeam.isEmpty else {
-            // Helper sin firma de equipo (build de desarrollo ad-hoc):
-            // no se puede anclar la confianza; rechazar por defecto.
-            return false
-        }
-        let requirementString = "anchor apple generic and certificate leaf[subject.OU] = \"\(selfTeam)\"" as CFString
-        var requirement: SecRequirement?
-        guard SecRequirementCreateWithString(requirementString, [], &requirement) == errSecSuccess,
-              let requirement else { return false }
-        return SecStaticCodeCheckValidity(staticCode, [], requirement) == errSecSuccess
-    }
-
     /// Team ID con el que está firmado este propio helper.
-    static func currentTeamIdentifier() -> String? {
+    static let teamIdentifier: String? = {
         var code: SecCode?
         guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return nil }
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else { return nil }
         var info: CFDictionary?
-        guard SecCodeCopySigningInformation(unsafeBitCast(code, to: SecStaticCode.self),
-                                            SecCSFlags(rawValue: kSecCSSigningInformation),
+        guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation),
                                             &info) == errSecSuccess,
               let dict = info as? [String: Any] else { return nil }
         return dict[kSecCodeInfoTeamIdentifier as String] as? String
+    }()
+
+    /// Texto del requisito y su versión compilada. nil sin Team ID válido:
+    /// entonces no se acepta ninguna conexión.
+    static let requirement: (text: String, compiled: SecRequirement)? = {
+        guard let text = HelperClientRequirement.clientRequirement(teamIdentifier: teamIdentifier) else {
+            return nil
+        }
+        var compiled: SecRequirement?
+        guard SecRequirementCreateWithString(text as CFString, [], &compiled) == errSecSuccess,
+              let compiled else { return nil }
+        return (text, compiled)
+    }()
+
+    /// nil si el proceso con ese PID cumple el requisito; si no, el motivo.
+    static func refusalReason(pid: pid_t, requirement: SecRequirement) -> String? {
+        var code: SecCode?
+        let attributes = [kSecGuestAttributePid: pid] as CFDictionary
+        let lookup = SecCodeCopyGuestWithAttributes(nil, attributes, [], &code)
+        guard lookup == errSecSuccess, let code else {
+            return "cannot read the client's code signature (OSStatus \(lookup))"
+        }
+        let status = SecCodeCheckValidity(code, [], requirement)
+        guard status != errSecSuccess else { return nil }
+        return "client \(signingSummary(code)) does not satisfy the requirement (OSStatus \(status))"
+    }
+
+    /// "identificador (team)" del cliente, para el registro.
+    private static func signingSummary(_ code: SecCode) -> String {
+        var staticCode: SecStaticCode?
+        var info: CFDictionary?
+        guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode,
+              SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation),
+                                            &info) == errSecSuccess,
+              let dict = info as? [String: Any] else { return "with an unreadable signature" }
+        let identifier = dict[kSecCodeInfoIdentifier as String] as? String ?? "unsigned"
+        let team = dict[kSecCodeInfoTeamIdentifier as String] as? String ?? "no Team ID"
+        return "\(identifier) (\(team))"
     }
 }
 
 final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
     func listener(_ listener: NSXPCListener,
                   shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
-        guard ClientVerifier.isTrusted(newConnection) else { return false }
+        let pid = newConnection.processIdentifier
+        let uid = newConnection.effectiveUserIdentifier
+        guard let requirement = ClientVerifier.requirement else {
+            log.error("Refusing connection from pid \(pid, privacy: .public): this helper has no Team ID (ad-hoc signature), so no client can be verified. Sign the app with a Developer ID or Apple Development identity.")
+            return false
+        }
+        if let reason = ClientVerifier.refusalReason(pid: pid, requirement: requirement.compiled) {
+            log.error("Refusing connection from pid \(pid, privacy: .public), uid \(uid, privacy: .public): \(reason, privacy: .public)")
+            return false
+        }
+        // Validado antes con SecRequirementCreateWithString: un requisito mal
+        // formado lanzaría una excepción de Objective-C.
+        newConnection.setCodeSigningRequirement(requirement.text)
+
+        let requests = RequestCounter()
+        newConnection.invalidationHandler = {
+            guard requests.isEmpty else { return }
+            log.info("Connection from pid \(pid, privacy: .public) closed before any request was handled (this includes clients that do not satisfy the code-signing requirement)")
+        }
         newConnection.exportedInterface = NSXPCInterface(with: OmnimountHelperProtocol.self)
         newConnection.exportedObject = HelperService(
-            caller: ImageOwner(uid: newConnection.effectiveUserIdentifier,
-                               gid: newConnection.effectiveGroupIdentifier))
+            caller: ImageOwner(uid: uid, gid: newConnection.effectiveGroupIdentifier),
+            requests: requests)
         newConnection.resume()
         return true
     }
@@ -239,12 +305,12 @@ final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
 
 // Herramientas: solo las del sistema en /sbin y /usr/sbin y las del bundle
 // junto a este ejecutable, firmadas con el mismo Team ID.
-if ClientVerifier.currentTeamIdentifier() == nil {
-    log.error("This helper has no Team ID (ad-hoc signature): bundled tools are not used.")
+if ClientVerifier.teamIdentifier == nil {
+    log.error("This helper has no Team ID (ad-hoc signature): connections are refused and bundled tools are not used.")
 }
 if let directory = ToolLocator.TrustedToolPolicy.currentExecutableDirectory() {
     ToolLocator.useTrustedLocations(.init(bundledToolDirectory: directory,
-                                          teamIdentifier: ClientVerifier.currentTeamIdentifier()))
+                                          teamIdentifier: ClientVerifier.teamIdentifier))
 } else {
     log.error("Cannot determine the helper's executable directory: bundled tools are not used.")
     ToolLocator.useTrustedLocations(.init(bundledToolDirectory: "", teamIdentifier: nil))

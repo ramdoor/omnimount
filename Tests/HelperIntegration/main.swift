@@ -1,7 +1,9 @@
 import Foundation
 
 // Compile beside Sources/OmnimountKit/HelperProtocol.swift, then sign this
-// executable with the same Developer ID team as the installed helper.
+// executable with the same team as the installed helper and the signing
+// identifier the helper accepts for this client:
+//   codesign --force --identifier org.omnimount.helper-integration --sign <identity> <executable>
 // This runner does not register services, install apps, or modify privileges.
 
 struct RunnerError: LocalizedError {
