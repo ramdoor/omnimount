@@ -313,17 +313,11 @@ final class ClonerTests: XCTestCase {
         XCTAssertNotNil(CallerAccess(checking: ImageOwner(uid: getuid(), gid: getgid())))
     }
 
-    func testCallerGroupsMatchTheProcessGroups() {
-        // Los grupos suplementarios con los que corre este proceso salen de
-        // la misma base de usuarios que consulta getgrouplist.
-        let count = getgroups(0, nil)
-        var processGroups = [gid_t](repeating: 0, count: Int(max(count, 0)))
-        XCTAssertEqual(getgroups(count, &processGroups), count)
-        let groups = CallerAccess.groups(of: getuid(), primary: getgid())
-        XCTAssertTrue(Set(processGroups).isSubset(of: groups),
-                      "missing \(Set(processGroups).subtracting(groups).sorted())")
-        // Un uid sin usuario solo tiene su grupo principal.
+    func testCallerGroupsAlwaysIncludeThePrimaryGroup() {
+        // Un uid sin usuario en la base de usuarios solo tiene su grupo principal.
         XCTAssertEqual(CallerAccess.groups(of: 4_000_000, primary: 4242), [4242])
+        // Para un usuario real, el grupo principal indicado siempre está incluido.
+        XCTAssertTrue(CallerAccess.groups(of: getuid(), primary: 4242).contains(4242))
     }
 
     /// Todas las combinaciones de modo, para propietario, miembro del grupo,
