@@ -86,7 +86,6 @@ enum L10nTable {
         "error.format.slash": .init(en: "cannot contain '/'", es: "no puede contener '/'"),
         "error.format.extLength": .init(en: "at most 16 bytes on ext*", es: "máximo 16 bytes en ext*"),
         "error.format.fatLength": .init(en: "at most 11 characters on FAT32", es: "máximo 11 caracteres en FAT32"),
-        "error.format.stillMounted": .init(en: "%@ is still mounted", es: "%@ sigue montada"),
         "error.format.mbrType": .init(en: ", MBR type %@", es: ", tipo MBR %@"),
         "error.format.summary": .init(en: "%@ formatted as %@ «%@»%@", es: "%@ formateada como %@ «%@»%@"),
         // error.helper
