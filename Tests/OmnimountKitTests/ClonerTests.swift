@@ -93,6 +93,112 @@ final class ClonerTests: XCTestCase {
         XCTAssertEqual(try Cloner.restoreImageSize(at: image.path), 4097)
     }
 
+    // MARK: - Escritura de la imagen
+
+    private func writeImage(_ source: Data, totalBytes: Int64, to image: URL,
+                            owner: ImageOwner? = nil) throws {
+        let sourceURL = directory.appendingPathComponent("raw-source")
+        try source.write(to: sourceURL)
+        let input = try FileHandle(forReadingFrom: sourceURL)
+        defer { try? input.close() }
+        try Cloner.writeImage(from: input, totalBytes: totalBytes, to: image.path,
+                              owner: owner, progress: { _ in })
+    }
+
+    private func partial(_ image: URL) -> URL {
+        URL(fileURLWithPath: image.path + ".partial")
+    }
+
+    private func exists(_ url: URL) -> Bool {
+        var info = stat()
+        return lstat(url.path, &info) == 0
+    }
+
+    func testPartialImagePathIsImagePathPlusSuffix() {
+        XCTAssertEqual(Cloner.partialImagePath(for: "/Users/me/Backups/card.img"),
+                       "/Users/me/Backups/card.img.partial")
+    }
+
+    func testFailedImageWriteLeavesNoFileAtFinalPath() throws {
+        let image = directory.appendingPathComponent("clone.img")
+        XCTAssertThrowsError(try writeImage(Data(repeating: 0x11, count: 8192), totalBytes: 16384, to: image)) {
+            guard case CloneError.ioError = $0 else { return XCTFail("Expected an I/O error, got \($0)") }
+        }
+        XCTAssertFalse(exists(image), "A failed clone must not leave an image at the final path")
+        XCTAssertFalse(exists(partial(image)), "A failed clone must remove its partial file")
+    }
+
+    func testFailedImageWritePreservesExistingImage() throws {
+        let image = directory.appendingPathComponent("clone.img")
+        let previous = Data(repeating: 0x5a, count: 4096)
+        try previous.write(to: image)
+        XCTAssertThrowsError(try writeImage(Data(repeating: 0x11, count: 8192), totalBytes: 16384, to: image))
+        XCTAssertEqual(try Data(contentsOf: image), previous)
+        XCTAssertFalse(exists(partial(image)))
+    }
+
+    func testSuccessfulImageWriteReplacesExistingRegularFile() throws {
+        let image = directory.appendingPathComponent("clone.img")
+        try Data(repeating: 0x5a, count: 16384).write(to: image)
+        let source = Data((0..<8192).map { UInt8(truncatingIfNeeded: $0) })
+        try writeImage(source, totalBytes: Int64(source.count), to: image)
+        XCTAssertEqual(try Data(contentsOf: image), source)
+        XCTAssertFalse(exists(partial(image)))
+    }
+
+    func testImageWriteAppliesOwnerAndMode() throws {
+        let image = directory.appendingPathComponent("clone.img")
+        let owner = ImageOwner(uid: getuid(), gid: getgid())
+        try writeImage(Data(repeating: 0x22, count: 4096), totalBytes: 4096, to: image, owner: owner)
+        var info = stat()
+        XCTAssertEqual(lstat(image.path, &info), 0)
+        XCTAssertEqual(info.st_uid, owner.uid)
+        XCTAssertEqual(info.st_gid, owner.gid)
+        XCTAssertEqual(info.st_mode & 0o7777, 0o644)
+        XCTAssertEqual(info.st_mode & S_IFMT, S_IFREG)
+    }
+
+    func testStalePartialFileOrSymlinkIsReplacedWithoutTouchingItsTarget() throws {
+        let image = directory.appendingPathComponent("clone.img")
+        let target = directory.appendingPathComponent("unrelated")
+        let targetContents = Data("unrelated file".utf8)
+        try targetContents.write(to: target)
+        try FileManager.default.createSymbolicLink(at: partial(image), withDestinationURL: target)
+
+        let source = Data(repeating: 0x33, count: 4096)
+        try writeImage(source, totalBytes: 4096, to: image)
+
+        XCTAssertEqual(try Data(contentsOf: image), source)
+        XCTAssertEqual(try Data(contentsOf: target), targetContents)
+        XCTAssertFalse(exists(partial(image)))
+    }
+
+    func testImageDestinationAcceptsMissingOrRegularFile() throws {
+        let image = directory.appendingPathComponent("clone.img")
+        try Cloner.checkImageDestination(image.path)
+        try Data("old".utf8).write(to: image)
+        try Cloner.checkImageDestination(image.path)
+    }
+
+    func testImageDestinationRejectsSymlinkAndDirectory() throws {
+        let target = directory.appendingPathComponent("target")
+        let link = directory.appendingPathComponent("link.img")
+        let contents = Data("keep".utf8)
+        try contents.write(to: target)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        let folder = directory.appendingPathComponent("folder.img")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
+
+        for path in [link.path, folder.path] {
+            XCTAssertThrowsError(try Cloner.checkImageDestination(path)) {
+                guard case CloneError.cannotOpen(path) = $0 else {
+                    return XCTFail("Expected cannotOpen(\(path)), got \($0)")
+                }
+            }
+        }
+        XCTAssertEqual(try Data(contentsOf: target), contents)
+    }
+
     private func disk(mountPoint: String? = nil) -> ExternalDisk {
         ExternalDisk(deviceIdentifier: "disk99", size: 8192, mediaName: "Test disk",
                      partitions: [DiskPartition(
