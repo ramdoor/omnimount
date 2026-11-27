@@ -331,6 +331,26 @@ final class MounterTests: XCTestCase {
         }
     }
 
+    func testMountOutputParsing() {
+        let output = """
+        /dev/disk3s1s1 on / (apfs, sealed, local, read-only, journaled)
+        /dev/disk4s10 on /Volumes/Other (msdos, local, nodev, nosuid)
+        fuse-t:/LINUX on /Volumes/LINUX (nfs, nodev, nosuid, mounted by root)
+        /dev/disk4s1 on /Volumes/Backup on USB (msdos, local, nodev, nosuid)
+        /dev/disk5s1 on /Volumes/Data (2024) (fuse, local)
+        malformed line without separator
+        """
+        XCTAssertEqual(Mounter.mountPoint(inMountOutput: output, devicePath: "/dev/disk4s1"),
+                       "/Volumes/Backup on USB")
+        XCTAssertEqual(Mounter.mountPoint(inMountOutput: output, devicePath: "/dev/disk4s10"),
+                       "/Volumes/Other")
+        XCTAssertEqual(Mounter.mountPoint(inMountOutput: output, devicePath: "/dev/disk5s1"),
+                       "/Volumes/Data (2024)")
+        XCTAssertEqual(Mounter.mountPoint(inMountOutput: output, devicePath: "/dev/disk3s1s1"), "/")
+        XCTAssertNil(Mounter.mountPoint(inMountOutput: output, devicePath: "/dev/disk4"))
+        XCTAssertNil(Mounter.mountPoint(inMountOutput: output, devicePath: "/dev/disk9s1"))
+    }
+
     private func result(_ status: Int32) -> ShellResult {
         ShellResult(exitCode: status, stdout: "diagnostic output", stderr: "")
     }

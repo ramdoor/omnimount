@@ -367,12 +367,18 @@ public enum Mounter {
     /// Busca el punto de montaje actual de un dispositivo consultando mount(8).
     public static func currentMountPoint(devicePath: String) -> String? {
         guard let result = try? ShellRunner.run("/sbin/mount", []) else { return nil }
-        for line in result.stdout.split(separator: "\n") {
-            // Formato: "/dev/disk4s1 on /Volumes/X (fuse, ...)"
-            let parts = line.components(separatedBy: " on ")
-            guard parts.count == 2, parts[0] == devicePath else { continue }
-            if let range = parts[1].range(of: " (", options: .backwards) {
-                return String(parts[1][..<range.lowerBound])
+        return mountPoint(inMountOutput: result.stdout, devicePath: devicePath)
+    }
+
+    /// Formato de cada línea: "/dev/disk4s1 on /Volumes/X (fuse, ...)". El
+    /// punto de montaje puede contener " on " o " (": se toma todo lo que
+    /// hay entre el prefijo del dispositivo y el último " (".
+    static func mountPoint(inMountOutput output: String, devicePath: String) -> String? {
+        let prefix = devicePath + " on "
+        for line in output.split(separator: "\n") where line.hasPrefix(prefix) {
+            let rest = line.dropFirst(prefix.count)
+            if let range = rest.range(of: " (", options: .backwards) {
+                return String(rest[..<range.lowerBound])
             }
         }
         return nil
