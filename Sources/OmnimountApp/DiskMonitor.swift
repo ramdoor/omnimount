@@ -56,7 +56,8 @@ final class DiskMonitor: ObservableObject {
     /// DiskArbitration dispara ráfagas de eventos al insertar un disco;
     /// se agrupan en un único refresco.
     nonisolated private func scheduleRefresh() {
-        Task { @MainActor in
+        Task { @MainActor [weak self] in
+            guard let self else { return }
             self.refreshWorkItem?.cancel()
             let item = DispatchWorkItem { [weak self] in self?.refresh() }
             self.refreshWorkItem = item
@@ -86,10 +87,11 @@ final class DiskMonitor: ObservableObject {
                     // (la prueba de escritura como usuario no lo era).
                     if Mounter.isMountReadOnlyByFlags(mp) { readOnly.insert(p.deviceIdentifier) }
                 }
+                let readOnlyResult = readOnly
                 await MainActor.run {
                     self.disks = disks
                     self.mountedByOmnimount = mounted
-                    self.readOnlyByMacOS = readOnly
+                    self.readOnlyByMacOS = readOnlyResult
                     self.retroMatch = retro
                     self.lastError = nil
                 }

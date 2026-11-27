@@ -54,6 +54,7 @@ struct OmnimountApp: App {
 
 /// Sin icono en el Dock: Omnimount vive solo en la barra de menú.
 /// (Al empaquetar como .app, LSUIElement en Info.plist hace lo mismo.)
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
