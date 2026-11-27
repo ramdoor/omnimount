@@ -75,6 +75,8 @@ sh.checkNtfs.missingFuseT	ERROR: %@ (%@) does not link libfuse-t.dylib. Run make
 sh.checkNtfs.oldMacOS	ERROR: %@ (%@) requires macOS %@; Omnimount supports 13+. Rebuild with MACOSX_DEPLOYMENT_TARGET=13.0 make ntfs3g.	ERROR: %@ (%@) requiere macOS %@; Omnimount soporta 13+. Recompila con MACOSX_DEPLOYMENT_TARGET=13.0 make ntfs3g.
 sh.buildNtfs.downloading	==> Downloading ntfs-3g %@	==> Descargando ntfs-3g %@
 sh.buildNtfs.noConfigure	ERROR: ntfs-3g source has no configure: %@	ERROR: fuente ntfs-3g sin configure: %@
+sh.buildNtfs.noPkgConfig	ERROR: pkg-config is not installed (brew install pkg-config).	ERROR: pkg-config no está instalado (brew install pkg-config).
+sh.buildNtfs.noFuseTPc	ERROR: pkg-config cannot find fuse-t.pc (expected in /usr/local/lib/pkgconfig). Reinstall FUSE-T.	ERROR: pkg-config no encuentra fuse-t.pc (debería estar en /usr/local/lib/pkgconfig). Reinstala FUSE-T.
 sh.buildFuse.noMacFuse	ERROR: macFUSE is not installed.	ERROR: macFUSE no está instalado.
 sh.buildFuse.installMacFuse	  brew install --cask macfuse (and approve the extension in System Settings)	  brew install --cask macfuse (y aprueba la extensión en Ajustes del Sistema)
 sh.buildFuse.noFuse3	ERROR: fuse3.pc was not found (incomplete macFUSE install?)	ERROR: no se encuentra fuse3.pc (¿instalación de macFUSE incompleta?)

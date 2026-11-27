@@ -33,7 +33,11 @@ else
     t sh.buildNtfs.downloading "$NTFS3G_VERSION"
     TARBALL="$BUILD_DIR/ntfs-3g_ntfsprogs-$NTFS3G_VERSION.tgz"
     if [ ! -f "$TARBALL" ]; then
-        curl -fL -o "$TARBALL" "https://tuxera.com/opensource/$(basename "$TARBALL")"
+        # Descargar a un nombre temporal: una descarga interrumpida no debe
+        # quedar con el nombre final ni reutilizarse.
+        rm -f "$TARBALL.part"
+        curl -fL -o "$TARBALL.part" "https://tuxera.com/opensource/$(basename "$TARBALL")"
+        mv "$TARBALL.part" "$TARBALL"
     fi
     SRC="$BUILD_DIR/ntfs-3g-$NTFS3G_VERSION"
     rm -rf "$SRC"
@@ -44,6 +48,14 @@ fi
 # configure consulta normalmente el módulo "fuse". Estas dos variables son
 # sus overrides oficiales y evitan esa selección ambigua sin tocar /usr/local.
 export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+if ! command -v pkg-config >/dev/null 2>&1; then
+    terr sh.buildNtfs.noPkgConfig
+    exit 1
+fi
+if ! pkg-config --exists fuse-t; then
+    terr sh.buildNtfs.noFuseTPc
+    exit 1
+fi
 FUSE_T_CFLAGS="$(pkg-config --cflags fuse-t)"
 FUSE_T_LIBS="$(pkg-config --libs fuse-t)"
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.0}"
