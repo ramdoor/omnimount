@@ -122,8 +122,15 @@ cp -R "$SPARKLE_FW" "$FRAMEWORKS/"
 APP_BIN="$APP/Contents/MacOS/Omnimount"
 FW_RPATH="@executable_path/../Frameworks"
 has_rpath() {
+    local arch load_commands
     for arch in arm64 x86_64; do
-        otool -arch "$arch" -l "$APP_BIN" | grep -Fq "path $FW_RPATH (" || return 1
+        # Capturar antes de buscar: con pipefail, un grep -q que termina pronto
+        # puede cortar a otool (SIGPIPE) y dar un falso negativo.
+        load_commands="$(otool -arch "$arch" -l "$APP_BIN")" || return 1
+        case "$load_commands" in
+        *"path $FW_RPATH ("*) ;;
+        *) return 1 ;;
+        esac
     done
 }
 if ! has_rpath; then
