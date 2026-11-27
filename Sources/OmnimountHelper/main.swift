@@ -6,10 +6,14 @@ import OmnimountKit
 /// escuchando peticiones XPC de la app para montar/desmontar sin pedir
 /// contraseña cada vez.
 
+/// Cada conexión XPC tiene su propia cola: las peticiones de conexiones
+/// distintas se ejecutan a la vez. Una sola operación por disco entero,
+/// compartida por todas las conexiones.
+private let diskGate = DiskOperationGate()
+
 /// Implementación de las operaciones. Corre como root, así que usa
 /// OmnimountKit directamente — el mismo código que el CLI bajo sudo.
 final class HelperService: NSObject, OmnimountHelperProtocol {
-
     func version(reply: @escaping (String) -> Void) {
         reply(HelperConstants.protocolVersion)
     }
@@ -38,10 +42,11 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
     func mount(deviceIdentifier: String, readOnly: Bool,
                reply: @escaping (Bool, String) -> Void) {
         do {
-            let part = try partition(for: deviceIdentifier)
-            let detection = try FilesystemDetector.detect(devicePath: part.devicePath)
-            let result = try Mounter.mount(partition: part, detection: detection,
-                                           readOnly: readOnly)
+            let result = try diskGate.run(on: deviceIdentifier) {
+                let part = try partition(for: deviceIdentifier)
+                let detection = try FilesystemDetector.detect(devicePath: part.devicePath)
+                return try Mounter.mount(partition: part, detection: detection, readOnly: readOnly)
+            }
             reply(true, (result.readOnly ? "RO:" : "") + result.mountPoint)
         } catch {
             reply(false, Self.friendlyMessage(error))
@@ -52,16 +57,22 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
     /// se obtiene del propio disco.
     func unmount(target: String, reply: @escaping (Bool, String) -> Void) {
         do {
-            let part = try partition(for: target)
-            // Orden: diskutil → mount(8) → derivado por etiqueta (FUSE-T).
-            guard let mountPoint = part.mountPoint
-                ?? Mounter.currentMountPoint(devicePath: part.devicePath)
-                ?? Mounter.derivedMountPoint(partition: part) else {
+            let unmounted: String? = try diskGate.run(on: target) {
+                let part = try partition(for: target)
+                // Orden: diskutil → mount(8) → derivado por etiqueta (FUSE-T).
+                guard let current = part.mountPoint
+                    ?? Mounter.currentMountPoint(devicePath: part.devicePath)
+                    ?? Mounter.derivedMountPoint(partition: part) else {
+                    return nil
+                }
+                try Mounter.unmount(mountPoint: current)
+                return current
+            }
+            guard let unmounted else {
                 reply(false, L10n.t("error.unmount.notMounted", target))
                 return
             }
-            try Mounter.unmount(mountPoint: mountPoint)
-            reply(true, mountPoint)
+            reply(true, unmounted)
         } catch {
             reply(false, Self.friendlyMessage(error))
         }
@@ -70,7 +81,9 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
     func clone(deviceIdentifier: String, imagePath: String,
                reply: @escaping (Bool, String) -> Void) {
         do {
-            try Cloner.clone(wholeDisk: deviceIdentifier, to: imagePath, progress: { _ in })
+            try diskGate.run(on: deviceIdentifier) {
+                try Cloner.clone(wholeDisk: deviceIdentifier, to: imagePath, progress: { _ in })
+            }
             // El helper corre como root: devolver la imagen al dueño del
             // directorio destino para que el usuario pueda usarla/borrarla.
             let dir = (imagePath as NSString).deletingLastPathComponent
@@ -88,7 +101,9 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
     func restore(imagePath: String, deviceIdentifier: String,
                  reply: @escaping (Bool, String) -> Void) {
         do {
-            try Cloner.restore(imagePath: imagePath, to: deviceIdentifier, progress: { _ in })
+            try diskGate.run(on: deviceIdentifier) {
+                try Cloner.restore(imagePath: imagePath, to: deviceIdentifier, progress: { _ in })
+            }
             reply(true, deviceIdentifier)
         } catch {
             reply(false, Self.friendlyMessage(error))
@@ -98,9 +113,11 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
     func makeWritable(deviceIdentifier: String,
                       reply: @escaping (Bool, String) -> Void) {
         do {
-            let part = try partition(for: deviceIdentifier)
-            let detection = try FilesystemDetector.detect(devicePath: part.devicePath)
-            let result = try Mounter.makeNtfsWritable(partition: part, detection: detection)
+            let result = try diskGate.run(on: deviceIdentifier) {
+                let part = try partition(for: deviceIdentifier)
+                let detection = try FilesystemDetector.detect(devicePath: part.devicePath)
+                return try Mounter.makeNtfsWritable(partition: part, detection: detection)
+            }
             reply(true, (result.readOnly ? "RO:" : "") + result.mountPoint)
         } catch {
             reply(false, Self.friendlyMessage(error))
@@ -110,14 +127,14 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
     func fixQuota(deviceIdentifier: String,
                   reply: @escaping (Bool, String) -> Void) {
         do {
-            let part = try partition(for: deviceIdentifier)
-            let detection = try FilesystemDetector.detect(devicePath: part.devicePath)
-            guard detection.extQuotaEnabled else {
-                reply(true, L10n.t("error.helper.noQuota"))
-                return
+            let changed = try diskGate.run(on: deviceIdentifier) { () -> Bool in
+                let part = try partition(for: deviceIdentifier)
+                let detection = try FilesystemDetector.detect(devicePath: part.devicePath)
+                guard detection.extQuotaEnabled else { return false }
+                try Mounter.disableExtQuota(devicePath: part.devicePath)
+                return true
             }
-            try Mounter.disableExtQuota(devicePath: part.devicePath)
-            reply(true, "")
+            reply(true, changed ? "" : L10n.t("error.helper.noQuota"))
         } catch {
             reply(false, Self.friendlyMessage(error))
         }
@@ -130,8 +147,10 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
             return
         }
         do {
-            let part = try partition(for: deviceIdentifier)
-            let summary = try Formatter.format(partition: part, as: target, label: label)
+            let summary = try diskGate.run(on: deviceIdentifier) {
+                let part = try partition(for: deviceIdentifier)
+                return try Formatter.format(partition: part, as: target, label: label)
+            }
             reply(true, summary)
         } catch {
             reply(false, Self.friendlyMessage(error))
