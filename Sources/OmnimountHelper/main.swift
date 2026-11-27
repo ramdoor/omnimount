@@ -1,5 +1,6 @@
 import Foundation
 import OmnimountKit
+import Security
 
 /// Daemon privilegiado de Omnimount. Lo registra la app con SMAppService
 /// (aprobación única en Ajustes → Elementos de inicio) y corre como root,
@@ -12,8 +13,16 @@ import OmnimountKit
 private let diskGate = DiskOperationGate()
 
 /// Implementación de las operaciones. Corre como root, así que usa
-/// OmnimountKit directamente — el mismo código que el CLI bajo sudo.
+/// OmnimountKit directamente — el mismo código que el CLI bajo sudo. Hay un
+/// objeto por conexión: `caller` es el usuario del proceso que se conectó,
+/// en cuyo nombre se crean y leen las imágenes.
 final class HelperService: NSObject, OmnimountHelperProtocol {
+    private let caller: ImageOwner
+
+    init(caller: ImageOwner) {
+        self.caller = caller
+    }
+
     func version(reply: @escaping (String) -> Void) {
         reply(HelperConstants.protocolVersion)
     }
@@ -81,16 +90,9 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
     func clone(deviceIdentifier: String, imagePath: String,
                reply: @escaping (Bool, String) -> Void) {
         do {
+            // La imagen se crea en nombre del usuario que lo pide y queda a su nombre.
             try diskGate.run(on: deviceIdentifier) {
-                try Cloner.clone(wholeDisk: deviceIdentifier, to: imagePath, progress: { _ in })
-            }
-            // El helper corre como root: devolver la imagen al dueño del
-            // directorio destino para que el usuario pueda usarla/borrarla.
-            let dir = (imagePath as NSString).deletingLastPathComponent
-            if let attrs = try? FileManager.default.attributesOfItem(atPath: dir),
-               let uid = (attrs[.ownerAccountID] as? NSNumber)?.uint32Value,
-               let gid = (attrs[.groupOwnerAccountID] as? NSNumber)?.uint32Value {
-                chown(imagePath, uid, gid)
+                try Cloner.clone(wholeDisk: deviceIdentifier, to: imagePath, owner: caller, progress: { _ in })
             }
             reply(true, imagePath)
         } catch {
@@ -101,8 +103,10 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
     func restore(imagePath: String, deviceIdentifier: String,
                  reply: @escaping (Bool, String) -> Void) {
         do {
+            // La imagen debe poder leerla el propio usuario que lo pide.
             try diskGate.run(on: deviceIdentifier) {
-                try Cloner.restore(imagePath: imagePath, to: deviceIdentifier, progress: { _ in })
+                try Cloner.restore(imagePath: imagePath, to: deviceIdentifier,
+                                   requestedBy: caller, progress: { _ in })
             }
             reply(true, deviceIdentifier)
         } catch {
@@ -222,7 +226,9 @@ final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
                   shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
         guard ClientVerifier.isTrusted(newConnection) else { return false }
         newConnection.exportedInterface = NSXPCInterface(with: OmnimountHelperProtocol.self)
-        newConnection.exportedObject = HelperService()
+        newConnection.exportedObject = HelperService(
+            caller: ImageOwner(uid: newConnection.effectiveUserIdentifier,
+                               gid: newConnection.effectiveGroupIdentifier))
         newConnection.resume()
         return true
     }
