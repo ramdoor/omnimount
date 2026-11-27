@@ -1,11 +1,14 @@
 import Foundation
 import OmnimountKit
+import os
 import Security
 
 /// Daemon privilegiado de Omnimount. Lo registra la app con SMAppService
 /// (aprobación única en Ajustes → Elementos de inicio) y corre como root,
 /// escuchando peticiones XPC de la app para montar/desmontar sin pedir
 /// contraseña cada vez.
+
+private let log = Logger(subsystem: "org.omnimount.helper", category: "xpc")
 
 /// Cada conexión XPC tiene su propia cola: las peticiones de conexiones
 /// distintas se ejecutan a la vez. Una sola operación por disco entero,
@@ -209,7 +212,7 @@ enum ClientVerifier {
     }
 
     /// Team ID con el que está firmado este propio helper.
-    private static func currentTeamIdentifier() -> String? {
+    static func currentTeamIdentifier() -> String? {
         var code: SecCode?
         guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return nil }
         var info: CFDictionary?
@@ -232,6 +235,19 @@ final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
         newConnection.resume()
         return true
     }
+}
+
+// Herramientas: solo las del sistema en /sbin y /usr/sbin y las del bundle
+// junto a este ejecutable, firmadas con el mismo Team ID.
+if ClientVerifier.currentTeamIdentifier() == nil {
+    log.error("This helper has no Team ID (ad-hoc signature): bundled tools are not used.")
+}
+if let directory = ToolLocator.TrustedToolPolicy.currentExecutableDirectory() {
+    ToolLocator.useTrustedLocations(.init(bundledToolDirectory: directory,
+                                          teamIdentifier: ClientVerifier.currentTeamIdentifier()))
+} else {
+    log.error("Cannot determine the helper's executable directory: bundled tools are not used.")
+    ToolLocator.useTrustedLocations(.init(bundledToolDirectory: "", teamIdentifier: nil))
 }
 
 let delegate = ListenerDelegate()
