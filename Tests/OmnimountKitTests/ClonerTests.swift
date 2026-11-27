@@ -93,6 +93,44 @@ final class ClonerTests: XCTestCase {
         XCTAssertEqual(try Cloner.restoreImageSize(at: image.path), 4097)
     }
 
+    // MARK: - Validación de la restauración
+
+    func testRestoreRejectsImageNotMultipleOfBlockSize() {
+        for (size, block) in [(Int64(4097), 512), (Int64(4097), 4096), (Int64(6144), 4096)] {
+            XCTAssertThrowsError(try Cloner.validateRestore(
+                imageSize: size, targetInfo: ["IOKitSize": 1_048_576, "DeviceBlockSize": block],
+                identifier: "disk99")) {
+                guard case CloneError.ioError(let message) = $0 else {
+                    return XCTFail("Expected an I/O error for \(size)/\(block), got \($0)")
+                }
+                XCTAssertTrue(message.contains(String(size)) && message.contains(String(block)), message)
+            }
+        }
+    }
+
+    func testRestoreWithoutReportedBlockSizeChecksSectorAlignment() {
+        XCTAssertThrowsError(try Cloner.validateRestore(imageSize: 4097, targetInfo: ["IOKitSize": 1_048_576],
+                                                        identifier: "disk99"))
+        XCTAssertNoThrow(try Cloner.validateRestore(imageSize: 4608, targetInfo: ["IOKitSize": 1_048_576],
+                                                    identifier: "disk99"))
+    }
+
+    func testRestoreAcceptsAlignedImageThatFits() {
+        XCTAssertNoThrow(try Cloner.validateRestore(
+            imageSize: 8192, targetInfo: ["IOKitSize": 8192, "DeviceBlockSize": 4096], identifier: "disk99"))
+        XCTAssertNoThrow(try Cloner.validateRestore(
+            imageSize: 1536, targetInfo: ["IOKitSize": 1_048_576, "DeviceBlockSize": 512], identifier: "disk99"))
+    }
+
+    func testRestoreRejectsImageLargerThanTarget() {
+        XCTAssertThrowsError(try Cloner.validateRestore(
+            imageSize: 16384, targetInfo: ["IOKitSize": 8192, "DeviceBlockSize": 512], identifier: "disk99")) {
+            guard case CloneError.imageLargerThanTarget(image: 16384, target: 8192) = $0 else {
+                return XCTFail("Expected image larger than target, got \($0)")
+            }
+        }
+    }
+
     // MARK: - Escritura de la imagen
 
     private func writeImage(_ source: Data, totalBytes: Int64, to image: URL,

@@ -236,10 +236,8 @@ public enum Cloner {
         guard getuid() == 0 else { throw CloneError.notRoot }
 
         let imageSize = try restoreImageSize(at: imagePath)
-        let targetSize = try diskSize(identifier)
-        guard imageSize <= targetSize else {
-            throw CloneError.imageLargerThanTarget(image: imageSize, target: targetSize)
-        }
+        try validateRestore(imageSize: imageSize, targetInfo: DiskLister.info(for: identifier),
+                            identifier: identifier)
 
         try unmountTarget(identifier)
 
@@ -255,6 +253,22 @@ public enum Cloner {
         defer { try? output.close() }
 
         try copyStream(from: input, to: output, totalBytes: imageSize, progress: progress)
+    }
+
+    /// Comprobaciones previas al desmontaje. Las escrituras en /dev/rdiskN
+    /// deben ser múltiplos del tamaño de bloque del dispositivo: una imagen
+    /// que no lo es fallaría en el último bloque, con el resto del destino ya
+    /// sobrescrito. Sin DeviceBlockSize se usa 512, el sector mínimo.
+    static func validateRestore(imageSize: Int64, targetInfo: [String: Any], identifier: String) throws {
+        let targetSize = try deviceSize(from: targetInfo, identifier: identifier)
+        guard imageSize <= targetSize else {
+            throw CloneError.imageLargerThanTarget(image: imageSize, target: targetSize)
+        }
+        let reported = (targetInfo["DeviceBlockSize"] as? NSNumber)?.int64Value ?? 0
+        let blockSize = reported > 0 ? reported : 512
+        guard imageSize % blockSize == 0 else {
+            throw CloneError.ioError(L10n.t("error.clone.misaligned", String(imageSize), String(blockSize)))
+        }
     }
 
     /// Rechaza una imagen vacía antes de consultar o desmontar el destino.
