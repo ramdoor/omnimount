@@ -63,14 +63,21 @@ final class HelperClient: ObservableObject {
                 SMAppService.openSystemSettingsLoginItems()
             }
         } catch {
-            let ns = error as NSError
-            // La constante SMAppServiceErrorDomain solo se exporta desde macOS
-            // 15; el nombre del dominio es el mismo en 13 y 14.
-            if ns.domain == "SMAppServiceErrorDomain", ns.code == kSMErrorAlreadyRegistered {
-                refreshState()
+            // register() también falla cuando el servicio ya estaba
+            // registrado (kSMErrorAlreadyRegistered) o cuando falta la
+            // aprobación del usuario (kSMErrorLaunchDeniedByUser). Decidir por
+            // el estado real del servicio, no por el código: si espera
+            // aprobación, abrir Elementos de inicio como en el caso de éxito;
+            // si ya está activo, no hay nada que hacer.
+            refreshState()
+            switch state {
+            case .requiresApproval:
+                SMAppService.openSystemSettingsLoginItems()
+            case .enabled:
                 return
+            default:
+                state = .unavailable(error.localizedDescription)
             }
-            state = .unavailable(error.localizedDescription)
         }
     }
 

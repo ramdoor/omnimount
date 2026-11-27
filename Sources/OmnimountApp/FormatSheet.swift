@@ -14,6 +14,9 @@ struct FormatSheet: View {
     @State private var label: String = ""
     @State private var confirmed = false
     @State private var working = false
+    /// La operación de formateo ya terminó (con o sin éxito): la hoja se
+    /// está cerrando y no debe volver a comprobar el disco.
+    @State private var finished = false
     /// Huella del dispositivo al abrir la hoja; se comprueba antes de borrar.
     @State private var identity: DiskIdentity?
 
@@ -66,6 +69,7 @@ struct FormatSheet: View {
                                            as: selectedFormat.rawValue,
                                            label: label.isEmpty ? "OMNIMOUNT" : label,
                                            expected: identity) {
+                        finished = true
                         working = false
                         monitor.refresh()
                         dismiss()
@@ -82,8 +86,9 @@ struct FormatSheet: View {
         .onReceive(monitor.$disks) { disks in
             // Si la partición desaparece o el identificador pasa a otro
             // dispositivo, cerrar la hoja. Durante el formateo la partición
-            // cambia legítimamente (etiqueta, remontaje): no comprobar.
-            guard !working, let identity, !identity.matches(in: disks) else { return }
+            // cambia legítimamente (etiqueta, remontaje): no comprobar, ni
+            // tampoco después, mientras la hoja se cierra.
+            guard !working, !finished, let identity, !identity.matches(in: disks) else { return }
             mountController.lastMessage = L10n.t("app.alert.diskChanged", partition.deviceIdentifier)
             dismiss()
         }
