@@ -278,14 +278,20 @@ final class MountController: ObservableObject {
                                completion: @escaping () -> Void) {
         guard let cli = cliPath else {
             lastMessage = L10n.t("app.alert.cliMissing")
+            completion()
             return
         }
         busyPartitions.insert(partition.deviceIdentifier)
         // Fijar el directorio de herramientas del bundle: aunque `cli` fuera un
         // omnimount ajeno del PATH, encontrará el fuse2fs embebido.
+        // Cada pieza va entrecomillada para el shell (la ruta de la app puede
+        // contener espacios u otros caracteres); ShellRunner.runPrivileged se
+        // encarga del escapado de la cadena AppleScript.
         let toolDir = Bundle.main.bundleURL
             .appendingPathComponent("Contents/MacOS").path
-        let command = "OMNIMOUNT_TOOL_DIR=\(toolDir) \(cli) \(verb) \(partition.deviceIdentifier)"
+        let command = ScriptQuoting.shellCommand(
+            cli, [verb, partition.deviceIdentifier],
+            environment: [("OMNIMOUNT_TOOL_DIR", toolDir)])
         let prompt = self.prompt
 
         Task.detached {
@@ -328,7 +334,10 @@ final class MountController: ObservableObject {
             // Forzar una ventana nueva del Finder (para comparar discos en
             // paralelo). NSWorkspace reutiliza la ventana existente; Finder vía
             // AppleScript sí abre una nueva.
-            let script = "tell application \"Finder\"\nmake new Finder window to (POSIX file \"\(mountPoint)\")\nactivate\nend tell"
+            // El punto de montaje deriva de la etiqueta del volumen: se pasa
+            // como literal AppleScript escapado.
+            let path = ScriptQuoting.appleScriptStringLiteral(mountPoint)
+            let script = "tell application \"Finder\"\nmake new Finder window to (POSIX file \(path))\nactivate\nend tell"
             DispatchQueue.global().async {
                 NSAppleScript(source: script)?.executeAndReturnError(nil)
             }
