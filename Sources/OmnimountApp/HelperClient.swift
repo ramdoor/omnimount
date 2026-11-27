@@ -51,7 +51,9 @@ final class HelperClient: ObservableObject {
             }
         } catch {
             let ns = error as NSError
-            if ns.code == 1 { // kSMErrorAlreadyRegistered
+            // La constante SMAppServiceErrorDomain solo se exporta desde macOS
+            // 15; el nombre del dominio es el mismo en 13 y 14.
+            if ns.domain == "SMAppServiceErrorDomain", ns.code == kSMErrorAlreadyRegistered {
                 refreshState()
                 return
             }
