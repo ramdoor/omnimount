@@ -17,6 +17,13 @@ if [ "$#" -gt 1 ] || { [ -n "$SKIP_NOTARIZE" ] && [ "$SKIP_NOTARIZE" != --skip-n
     exit 2
 fi
 
+# generate_appcast (de Sparkle) no está en el repo ni lo compila ningún script;
+# comprobarlo antes de empezar, no tras notarizar.
+if [ "$SKIP_NOTARIZE" != "--skip-notarize" ] && [ ! -x vendor/bin/generate_appcast ]; then
+    terr sh.release.noAppcastTool
+    exit 1
+fi
+
 t sh.release.stepApp
 ./scripts/make-app.sh
 

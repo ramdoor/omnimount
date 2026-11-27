@@ -1,6 +1,8 @@
 # Omnimount — atajos de desarrollo e instalación.
 # En Apple Silicon /opt/homebrew pertenece al usuario: no hace falta sudo.
-PREFIX ?= /opt/homebrew
+# Prefijo de Homebrew si está instalado; si no, /opt/homebrew (arm64) o
+# /usr/local (Intel). Se puede sustituir: make PREFIX=/otra/ruta.
+PREFIX ?= $(shell brew --prefix 2>/dev/null || { [ "$$(uname -m)" = arm64 ] && echo /opt/homebrew || echo /usr/local; })
 # Compilar fuera del árbol del repo (evita saturar carpetas sincronizadas).
 SCRATCH ?= $(HOME)/.omnimount-build
 
@@ -12,7 +14,7 @@ ifeq ($(SIGN_ID),)
 SIGN_ID := -
 endif
 
-.PHONY: build test app install install-cli fuse2fs clean
+.PHONY: build test app install install-cli ntfs3g fuse2fs clean
 
 build:
 	swift build --scratch-path $(SCRATCH)
