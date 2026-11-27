@@ -237,6 +237,24 @@ final class ClonerTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: target), targetContents)
     }
 
+    func testFreeSpaceArithmeticDoesNotOverflow() {
+        XCTAssertEqual(ImageDestination.freeBytes(availableBlocks: 0, blockSize: 4096), 0)
+        XCTAssertEqual(ImageDestination.freeBytes(availableBlocks: 1000, blockSize: 4096), 4_096_000)
+        XCTAssertEqual(ImageDestination.freeBytes(availableBlocks: UInt64(Int64.max) / 4096, blockSize: 4096),
+                       Int64.max / 4096 * 4096)
+        // Producto mayor que Int64.max, desbordamiento de UInt64 y valores máximos.
+        XCTAssertEqual(ImageDestination.freeBytes(availableBlocks: UInt64(Int64.max) / 4096 + 1, blockSize: 4096), .max)
+        XCTAssertEqual(ImageDestination.freeBytes(availableBlocks: UInt64.max / 2, blockSize: 4), .max)
+        XCTAssertEqual(ImageDestination.freeBytes(availableBlocks: .max, blockSize: .max), .max)
+        XCTAssertEqual(ImageDestination.freeBytes(availableBlocks: UInt64(Int64.max) + 1, blockSize: 1), .max)
+    }
+
+    func testFreeSpaceOfOpenedFolderIsReported() throws {
+        let destination = try ImageDestination.open(directory.appendingPathComponent("clone.img").path,
+                                                    owner: nil, access: nil)
+        XCTAssertGreaterThan(try XCTUnwrap(destination.freeBytes()), 0)
+    }
+
     func testImageDestinationAcceptsMissingOrRegularFile() throws {
         let image = directory.appendingPathComponent("clone.img")
         try ImageDestination.open(image.path, owner: nil, access: nil).checkExistingImage()

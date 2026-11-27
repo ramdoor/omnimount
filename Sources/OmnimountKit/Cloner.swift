@@ -533,7 +533,15 @@ final class ImageDestination {
     func freeBytes() -> Int64? {
         var info = statfs()
         guard fstatfs(directory, &info) == 0 else { return nil }
-        return Int64(info.f_bavail) * Int64(info.f_bsize)
+        return Self.freeBytes(availableBlocks: info.f_bavail, blockSize: info.f_bsize)
+    }
+
+    /// Bloques libres × tamaño de bloque sin desbordar: un valor que no cabe
+    /// en Int64 cuenta como espacio suficiente.
+    static func freeBytes(availableBlocks: UInt64, blockSize: UInt32) -> Int64 {
+        let (product, overflow) = availableBlocks.multipliedReportingOverflow(by: UInt64(blockSize))
+        guard !overflow else { return .max }
+        return Int64(exactly: product) ?? .max
     }
 
     /// Con `access`, un fichero existente solo se sustituye si es del usuario
