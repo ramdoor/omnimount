@@ -9,8 +9,44 @@ import OmnimountKit
 @MainActor
 final class MountController: ObservableObject {
 
-    @Published var busyPartitions: Set<String> = []
+    /// Operaciones en curso por disco entero: mientras una trabaja sobre un
+    /// disco o una de sus particiones, la interfaz desactiva el resto de
+    /// acciones de ese disco.
+    @Published private(set) var busy = DiskBusyRegistry()
     @Published var lastMessage: String?
+
+    /// true mientras quede alguna operación en curso.
+    var hasActiveOperations: Bool { !busy.isEmpty }
+
+    /// Registra una operación sobre `target`. Si su disco ya está ocupado no
+    /// la registra, deja el aviso en `lastMessage` y devuelve false.
+    private func beginOperation(on target: String, wholeDisk: String) -> Bool {
+        guard busy.begin(target: target, wholeDisk: wholeDisk) else {
+            lastMessage = L10n.t("app.alert.diskBusy", wholeDisk)
+            return false
+        }
+        return true
+    }
+
+    private func endOperation(on target: String) {
+        busy.end(target: target)
+    }
+
+    /// Comprueba que `expected` sigue apuntando al mismo dispositivo y llama a
+    /// `completion` en el hilo principal con el resultado. Sin ID de registro
+    /// IOKit hace falta un listado nuevo (diskutil), que se lee fuera del
+    /// hilo principal.
+    private func verifyIdentity(_ expected: DiskIdentity,
+                                completion: @escaping (Bool) -> Void) {
+        guard expected.needsFreshListing else {
+            completion(expected.matches(in: []))
+            return
+        }
+        Task.detached(priority: .userInitiated) {
+            let disks = (try? DiskLister.externalDisks()) ?? []
+            await MainActor.run { completion(expected.matches(in: disks)) }
+        }
+    }
     /// Partición cuyo montaje falló por cuotas ext4 internas: la UI ofrece
     /// desactivarlas con un clic (vía helper).
     @Published var quotaFixTarget: DiskPartition?
@@ -73,10 +109,15 @@ final class MountController: ObservableObject {
     private var cloneTimer: Timer?
 
     /// Clona un disco o partición a un .img elegido con NSSavePanel.
-    func cloneToImage(identifier: String, suggestedName: String, totalBytes: Int64,
-                      completion: @escaping () -> Void) {
+    /// Solo hay un clonado/restauración a la vez (un único indicador de progreso).
+    func cloneToImage(identifier: String, wholeDisk: String, suggestedName: String,
+                      totalBytes: Int64, completion: @escaping () -> Void) {
         guard helper.state == .enabled else {
             lastMessage = L10n.t("app.alert.cloneNeedsHelper", identifier)
+            completion(); return
+        }
+        guard cloneLabel == nil, !busy.isDiskBusy(wholeDisk) else {
+            lastMessage = L10n.t("app.alert.diskBusy", wholeDisk)
             completion(); return
         }
         let panel = NSSavePanel()
@@ -85,17 +126,29 @@ final class MountController: ObservableObject {
         panel.canCreateDirectories = true
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let url = panel.url else { completion(); return }
+        // El panel es modal: comprobar de nuevo antes de empezar.
+        guard cloneLabel == nil, beginOperation(on: identifier, wholeDisk: wholeDisk) else {
+            completion(); return
+        }
 
         cloneLabel = L10n.t("app.alert.cloning", identifier, url.lastPathComponent)
         cloneProgress = 0
         let path = url.path
+        // El clonado puede escribir primero en "<imagen>.partial" y renombrar
+        // al terminar: sondear ese fichero y, si no existe, la ruta final.
+        let partialPath = path + ".partial"
+        cloneTimer?.invalidate()
         cloneTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             guard let self, totalBytes > 0 else { return }
-            let written = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int64 ?? 0
+            let size: (String) -> Int64? = {
+                (try? FileManager.default.attributesOfItem(atPath: $0))?[.size] as? Int64
+            }
+            let written = size(partialPath) ?? size(path) ?? 0
             Task { @MainActor in self.cloneProgress = min(1, Double(written) / Double(totalBytes)) }
         }
         helper.clone(deviceIdentifier: identifier, imagePath: path) { [weak self] ok, message in
             guard let self else { return }
+            self.endOperation(on: identifier)
             self.cloneTimer?.invalidate(); self.cloneTimer = nil
             self.cloneLabel = nil; self.cloneProgress = nil
             self.lastFormatSummary = ok ? L10n.t("app.alert.imageSaved", message) : nil
@@ -105,9 +158,17 @@ final class MountController: ObservableObject {
     }
 
     /// Restaura un .img sobre un disco o partición, con confirmación destructiva.
-    func restoreImage(identifier: String, displayName: String, completion: @escaping () -> Void) {
+    func restoreImage(disk: ExternalDisk, completion: @escaping () -> Void) {
+        let identifier = disk.deviceIdentifier
+        let displayName = disk.mediaName ?? disk.deviceIdentifier
+        // Huella del disco elegido, antes de los diálogos modales.
+        let expected = DiskIdentity(disk: disk)
         guard helper.state == .enabled else {
             lastMessage = L10n.t("app.alert.restoreNeedsHelper", identifier)
+            completion(); return
+        }
+        guard cloneLabel == nil, !busy.isDiskBusy(identifier) else {
+            lastMessage = L10n.t("app.alert.diskBusy", identifier)
             completion(); return
         }
         let panel = NSOpenPanel()
@@ -124,15 +185,30 @@ final class MountController: ObservableObject {
         alert.addButton(withTitle: L10n.t("app.common.restore"))
         alert.addButton(withTitle: L10n.t("app.common.cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { completion(); return }
-
+        // Panel y alerta son modales: comprobar de nuevo antes de empezar.
+        guard cloneLabel == nil, beginOperation(on: identifier, wholeDisk: identifier) else {
+            completion(); return
+        }
         cloneLabel = L10n.t("app.alert.restoring", url.lastPathComponent, identifier)
         cloneProgress = nil
-        helper.restore(imagePath: url.path, deviceIdentifier: identifier) { [weak self] ok, message in
+
+        verifyIdentity(expected) { [weak self] stillSame in
             guard let self else { return }
-            self.cloneLabel = nil
-            self.lastFormatSummary = ok ? L10n.t("app.alert.imageRestored", message) : nil
-            self.lastMessage = ok ? nil : message
-            completion()
+            guard stillSame else {
+                self.endOperation(on: identifier)
+                self.cloneLabel = nil
+                self.lastMessage = L10n.t("app.alert.diskChanged", identifier)
+                completion()
+                return
+            }
+            self.helper.restore(imagePath: url.path, deviceIdentifier: identifier) { [weak self] ok, message in
+                guard let self else { return }
+                self.endOperation(on: identifier)
+                self.cloneLabel = nil
+                self.lastFormatSummary = ok ? L10n.t("app.alert.imageRestored", message) : nil
+                self.lastMessage = ok ? nil : message
+                completion()
+            }
         }
     }
 
@@ -141,35 +217,50 @@ final class MountController: ObservableObject {
     @Published var lastFormatSummary: String?
 
     /// Formatea vía helper. La vista DEBE haber confirmado antes con el usuario.
+    /// `expected` es la huella tomada al abrir el diálogo: si el identificador
+    /// ya apunta a otro dispositivo, no se formatea.
     func format(_ partition: DiskPartition, as filesystem: String, label: String,
-                completion: @escaping () -> Void) {
+                expected: DiskIdentity, completion: @escaping () -> Void) {
         guard helper.state == .enabled else {
             lastMessage = L10n.t("app.alert.formatNeedsHelper")
             completion()
             return
         }
-        busyPartitions.insert(partition.deviceIdentifier)
-        helper.format(deviceIdentifier: partition.deviceIdentifier,
-                      filesystem: filesystem, label: label) { [weak self] ok, message in
+        guard beginOperation(on: partition.deviceIdentifier, wholeDisk: partition.parentWholeDisk) else {
+            completion(); return
+        }
+        verifyIdentity(expected) { [weak self] stillSame in
             guard let self else { return }
-            self.busyPartitions.remove(partition.deviceIdentifier)
-            if ok {
-                self.lastMessage = nil
-                self.lastFormatSummary = message
-                self.monitor?.forgetOmnimountMount(deviceIdentifier: partition.deviceIdentifier)
-            } else {
-                self.lastMessage = message
+            guard stillSame else {
+                self.endOperation(on: partition.deviceIdentifier)
+                self.lastMessage = L10n.t("app.alert.diskChanged", partition.deviceIdentifier)
+                completion()
+                return
             }
-            completion()
+            self.helper.format(deviceIdentifier: partition.deviceIdentifier,
+                               filesystem: filesystem, label: label) { [weak self] ok, message in
+                guard let self else { return }
+                self.endOperation(on: partition.deviceIdentifier)
+                if ok {
+                    self.lastMessage = nil
+                    self.lastFormatSummary = message
+                    self.monitor?.forgetOmnimountMount(deviceIdentifier: partition.deviceIdentifier)
+                } else {
+                    self.lastMessage = message
+                }
+                completion()
+            }
         }
     }
 
     private func runViaHelper(partition: DiskPartition, verb: String,
                               completion: @escaping () -> Void) {
-        busyPartitions.insert(partition.deviceIdentifier)
+        guard beginOperation(on: partition.deviceIdentifier, wholeDisk: partition.parentWholeDisk) else {
+            completion(); return
+        }
         let handle: (Bool, String) -> Void = { [weak self] ok, message in
             guard let self else { return }
-            self.busyPartitions.remove(partition.deviceIdentifier)
+            self.endOperation(on: partition.deviceIdentifier)
             if ok {
                 self.lastMessage = nil
                 if verb == "mount" {
@@ -227,10 +318,12 @@ final class MountController: ObservableObject {
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn else { completion(); return }
 
-        busyPartitions.insert(partition.deviceIdentifier)
+        guard beginOperation(on: partition.deviceIdentifier, wholeDisk: partition.parentWholeDisk) else {
+            completion(); return
+        }
         helper.makeWritable(deviceIdentifier: partition.deviceIdentifier) { [weak self] ok, message in
             guard let self else { return }
-            self.busyPartitions.remove(partition.deviceIdentifier)
+            self.endOperation(on: partition.deviceIdentifier)
             if ok {
                 self.lastMessage = nil
                 self.readOnlyPartitions.remove(partition.deviceIdentifier)
@@ -260,10 +353,12 @@ final class MountController: ObservableObject {
             completion()
             return
         }
-        busyPartitions.insert(partition.deviceIdentifier)
+        guard beginOperation(on: partition.deviceIdentifier, wholeDisk: partition.parentWholeDisk) else {
+            completion(); return
+        }
         helper.fixQuota(deviceIdentifier: partition.deviceIdentifier) { [weak self] ok, message in
             guard let self else { return }
-            self.busyPartitions.remove(partition.deviceIdentifier)
+            self.endOperation(on: partition.deviceIdentifier)
             if ok {
                 self.lastMessage = nil
                 self.mount(partition, completion: completion)
@@ -278,14 +373,22 @@ final class MountController: ObservableObject {
                                completion: @escaping () -> Void) {
         guard let cli = cliPath else {
             lastMessage = L10n.t("app.alert.cliMissing")
+            completion()
             return
         }
-        busyPartitions.insert(partition.deviceIdentifier)
+        guard beginOperation(on: partition.deviceIdentifier, wholeDisk: partition.parentWholeDisk) else {
+            completion(); return
+        }
         // Fijar el directorio de herramientas del bundle: aunque `cli` fuera un
         // omnimount ajeno del PATH, encontrará el fuse2fs embebido.
+        // Cada pieza va entrecomillada para el shell (la ruta de la app puede
+        // contener espacios u otros caracteres); ShellRunner.runPrivileged se
+        // encarga del escapado de la cadena AppleScript.
         let toolDir = Bundle.main.bundleURL
             .appendingPathComponent("Contents/MacOS").path
-        let command = "OMNIMOUNT_TOOL_DIR=\(toolDir) \(cli) \(verb) \(partition.deviceIdentifier)"
+        let command = ScriptQuoting.shellCommand(
+            cli, [verb, partition.deviceIdentifier],
+            environment: [("OMNIMOUNT_TOOL_DIR", toolDir)])
         let prompt = self.prompt
 
         Task.detached {
@@ -293,7 +396,7 @@ final class MountController: ObservableObject {
                 try ShellRunner.runPrivileged(command, prompt: prompt)
             }
             await MainActor.run {
-                self.busyPartitions.remove(partition.deviceIdentifier)
+                self.endOperation(on: partition.deviceIdentifier)
                 switch result {
                 case .success(let shell) where shell.succeeded:
                     self.lastMessage = nil
@@ -328,7 +431,10 @@ final class MountController: ObservableObject {
             // Forzar una ventana nueva del Finder (para comparar discos en
             // paralelo). NSWorkspace reutiliza la ventana existente; Finder vía
             // AppleScript sí abre una nueva.
-            let script = "tell application \"Finder\"\nmake new Finder window to (POSIX file \"\(mountPoint)\")\nactivate\nend tell"
+            // El punto de montaje deriva de la etiqueta del volumen: se pasa
+            // como literal AppleScript escapado.
+            let path = ScriptQuoting.appleScriptStringLiteral(mountPoint)
+            let script = "tell application \"Finder\"\nmake new Finder window to (POSIX file \(path))\nactivate\nend tell"
             DispatchQueue.global().async {
                 NSAppleScript(source: script)?.executeAndReturnError(nil)
             }

@@ -24,11 +24,24 @@ final class HelperClient: ObservableObject {
         SMAppService.daemon(plistName: HelperConstants.plistName)
     }
 
+    /// Resultado de comprobar la firma de la app frente a la del helper.
+    let trust: HelperTrust = SigningCheck.helperTrust()
+
+    /// true si el helper va a rechazar esta app por su firma (build sin Team
+    /// ID, p. ej. ad-hoc). Registrar o reparar el helper no lo resuelve.
+    var isRejectedBySigning: Bool { trust.rejectsThisApp }
+
     init() { refreshState() }
 
     func refreshState() {
         guard #available(macOS 13.0, *) else {
             state = .unavailable(L10n.t("error.helper.needsMacOS13"))
+            return
+        }
+        // El helper rechazaría todas las conexiones: tratarlo como no
+        // disponible para que montar/expulsar usen el diálogo de administrador.
+        if isRejectedBySigning {
+            state = .unavailable(L10n.t("error.helper.signingRejected"))
             return
         }
         switch service.status {
@@ -42,7 +55,7 @@ final class HelperClient: ObservableObject {
     /// Registra el daemon. Si macOS exige aprobación, abre el panel de
     /// Elementos de inicio para que el usuario lo active.
     func install() {
-        guard #available(macOS 13.0, *) else { refreshState(); return }
+        guard #available(macOS 13.0, *), !isRejectedBySigning else { refreshState(); return }
         do {
             try service.register()
             refreshState()
@@ -51,7 +64,9 @@ final class HelperClient: ObservableObject {
             }
         } catch {
             let ns = error as NSError
-            if ns.code == 1 { // kSMErrorAlreadyRegistered
+            // La constante SMAppServiceErrorDomain solo se exporta desde macOS
+            // 15; el nombre del dominio es el mismo en 13 y 14.
+            if ns.domain == "SMAppServiceErrorDomain", ns.code == kSMErrorAlreadyRegistered {
                 refreshState()
                 return
             }
@@ -70,7 +85,7 @@ final class HelperClient: ObservableObject {
     /// coincidir con el binario nuevo. Des-registrar y volver a registrar la
     /// refresca.
     func repair() {
-        guard #available(macOS 13.0, *) else { return }
+        guard #available(macOS 13.0, *), !isRejectedBySigning else { return }
         try? service.unregister()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.install()
@@ -87,21 +102,26 @@ final class HelperClient: ObservableObject {
         return connection
     }
 
-    /// Ejecuta una operación contra el helper con timeout y limpieza de la
-    /// conexión. El bloque recibe el proxy y un `finish` que debe llamar.
-    private func withHelper(timeout: TimeInterval = 60,
+    /// Ejecuta una operación contra el helper y cierra la conexión al acabar.
+    /// El bloque recibe el proxy y un `finish` que debe llamar. `completion`
+    /// se ejecuta una sola vez, en el hilo principal.
+    ///
+    /// `timeout` nil = sin límite en el cliente: para las operaciones que
+    /// modifican un disco. El helper no cancela una operación cuando el
+    /// cliente se va, así que dar por fallida una operación que sigue en
+    /// curso liberaría el disco en la interfaz mientras el helper aún lo
+    /// usa. Esas operaciones terminan con la respuesta del helper o con el
+    /// manejador de error de la conexión (helper caído o que no arranca).
+    private func withHelper(timeout: TimeInterval?,
                             _ body: @escaping (OmnimountHelperProtocol,
                                                @escaping (Bool, String) -> Void) -> Void,
                             completion: @escaping (Bool, String) -> Void) {
         let connection = makeConnection()
-        var finished = false
-
-        func finish(_ ok: Bool, _ message: String) {
-            guard !finished else { return }
-            finished = true
+        let once = OneShot<(Bool, String)> { result in
             connection.invalidate()
-            DispatchQueue.main.async { completion(ok, message) }
+            DispatchQueue.main.async { completion(result.0, result.1) }
         }
+        let finish: (Bool, String) -> Void = { ok, message in once.fire((ok, message)) }
 
         guard let proxy = connection.remoteObjectProxyWithErrorHandler({ error in
             finish(false, L10n.t("error.helper.notResponding", error.localizedDescription))
@@ -110,41 +130,40 @@ final class HelperClient: ObservableObject {
             return
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
-            finish(false, L10n.t("error.helper.timeout"))
+        if let timeout {
+            DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
+                finish(false, L10n.t("error.helper.timeout"))
+            }
         }
-        body(proxy) { ok, message in finish(ok, message) }
+        body(proxy, finish)
     }
 
     func mount(deviceIdentifier: String,
                completion: @escaping (Bool, String) -> Void) {
-        // Montar ext4 incluye un e2fsck -p previo (reproduce el journal); en un
-        // disco grande y "sucio" puede tardar minutos. Timeout generoso.
-        withHelper(timeout: 1800, { proxy, finish in
+        withHelper(timeout: nil, { proxy, finish in
             proxy.mount(deviceIdentifier: deviceIdentifier, readOnly: false, reply: finish)
         }, completion: completion)
     }
 
     func unmount(target: String,
                  completion: @escaping (Bool, String) -> Void) {
-        withHelper({ proxy, finish in
+        withHelper(timeout: nil, { proxy, finish in
             proxy.unmount(target: target, reply: finish)
         }, completion: completion)
     }
 
     func format(deviceIdentifier: String, filesystem: String, label: String,
                 completion: @escaping (Bool, String) -> Void) {
-        // Formatear puede tardar (mkntfs en particiones grandes): timeout amplio.
-        withHelper(timeout: 600, { proxy, finish in
+        withHelper(timeout: nil, { proxy, finish in
             proxy.format(deviceIdentifier: deviceIdentifier,
                          filesystem: filesystem, label: label, reply: finish)
         }, completion: completion)
     }
 
-    /// Clona disco/partición a imagen. Timeout muy largo: un disco grande tarda horas.
+    /// Clona disco/partición a imagen.
     func clone(deviceIdentifier: String, imagePath: String,
                completion: @escaping (Bool, String) -> Void) {
-        withHelper(timeout: 21600, { proxy, finish in
+        withHelper(timeout: nil, { proxy, finish in
             proxy.clone(deviceIdentifier: deviceIdentifier, imagePath: imagePath, reply: finish)
         }, completion: completion)
     }
@@ -152,34 +171,53 @@ final class HelperClient: ObservableObject {
     /// Restaura una imagen sobre disco/partición. El llamante confirma antes.
     func restore(imagePath: String, deviceIdentifier: String,
                  completion: @escaping (Bool, String) -> Void) {
-        withHelper(timeout: 21600, { proxy, finish in
+        withHelper(timeout: nil, { proxy, finish in
             proxy.restore(imagePath: imagePath, deviceIdentifier: deviceIdentifier, reply: finish)
         }, completion: completion)
     }
 
     /// Vuelve escribible un NTFS que Windows dejó en solo lectura.
     func makeWritable(deviceIdentifier: String, completion: @escaping (Bool, String) -> Void) {
-        withHelper(timeout: 300, { proxy, finish in
+        withHelper(timeout: nil, { proxy, finish in
             proxy.makeWritable(deviceIdentifier: deviceIdentifier, reply: finish)
         }, completion: completion)
     }
 
     /// Desactiva las cuotas ext4 internas de una partición (tune2fs + e2fsck).
     func fixQuota(deviceIdentifier: String, completion: @escaping (Bool, String) -> Void) {
-        withHelper(timeout: 300, { proxy, finish in
+        withHelper(timeout: nil, { proxy, finish in
             proxy.fixQuota(deviceIdentifier: deviceIdentifier, reply: finish)
         }, completion: completion)
     }
 
-    /// Autotest de Acceso total al disco del helper.
-    /// completion(alcanzable, tieneFDA)
-    func checkFullDiskAccess(completion: @escaping (Bool, Bool) -> Void) {
+    enum Probe: Equatable {
+        /// Responde con la versión de protocolo esperada.
+        case ok(hasFullDiskAccess: Bool)
+        /// Responde, pero con otra versión de protocolo (sigue en marcha un
+        /// helper antiguo).
+        case outdated(helperVersion: String)
+        /// No responde; lleva el texto del error.
+        case unreachable(String)
+    }
+
+    /// Comprueba que el helper responde (`version()`, el saludo previsto en
+    /// el protocolo) y, si es así, su Acceso total al disco.
+    func probe(completion: @escaping (Probe) -> Void) {
         withHelper(timeout: 10, { proxy, finish in
-            proxy.checkFullDiskAccess { hasAccess in
-                finish(true, hasAccess ? "1" : "0")
+            proxy.version { version in finish(true, version) }
+        }, completion: { [weak self] ok, payload in
+            guard let self else { return }
+            guard ok else { completion(.unreachable(payload)); return }
+            guard payload == HelperConstants.protocolVersion else {
+                completion(.outdated(helperVersion: payload)); return
             }
-        }, completion: { reachable, payload in
-            completion(reachable, payload == "1")
+            self.withHelper(timeout: 10, { proxy, finish in
+                proxy.checkFullDiskAccess { hasAccess in
+                    finish(true, hasAccess ? "1" : "0")
+                }
+            }, completion: { ok, payload in
+                completion(ok ? .ok(hasFullDiskAccess: payload == "1") : .unreachable(payload))
+            })
         })
     }
 }
