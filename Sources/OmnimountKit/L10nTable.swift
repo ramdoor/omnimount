@@ -313,5 +313,8 @@ enum L10nTable {
         "cli.doctor.ready": .init(en: "All set: Omnimount can mount ext2/3/4 and NTFS.", es: "Todo listo: Omnimount puede montar ext2/3/4 y NTFS."),
         "cli.doctor.noExt": .init(en: "ext2/3/4 still cannot be mounted.", es: "Aún no se puede montar ext2/3/4."),
         "cli.doctor.noNtfs": .init(en: "NTFS still cannot be mounted.", es: "Aún no se puede montar NTFS."),
+        // error.mount (comprobaciones previas al montaje)
+        "error.mount.alreadyMounted": .init(en: "%@ is already mounted at %@. Eject it first.", es: "%@ ya está montado en %@. Expúlsalo primero."),
+        "error.mount.pointInUse": .init(en: "%@ is already in use by another volume. Eject it in Finder and try again.", es: "%@ ya está en uso por otro volumen. Expúlsalo desde el Finder y vuelve a intentarlo."),
     ]
 }

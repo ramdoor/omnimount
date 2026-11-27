@@ -86,6 +86,87 @@ final class MounterTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: file), contents)
     }
 
+    func testPrepareMountPointRejectsSymlinkToDirectory() throws {
+        let target = directory.appendingPathComponent("target")
+        let link = directory.appendingPathComponent("link")
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: false)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+        XCTAssertThrowsError(try Mounter.prepareMountPoint(link.path, isMountPoint: { _ in false }))
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: link.path), target.path)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: target.path))
+    }
+
+    func testPrepareMountPointRejectsDirectoryThatIsAlreadyAMountPoint() throws {
+        XCTAssertThrowsError(try Mounter.prepareMountPoint(directory.path,
+                                                           isMountPoint: { $0 == self.directory.path })) { error in
+            guard case MountError.mountPointInUse(let path) = error else {
+                return XCTFail("Expected mount point in use, got \(error)")
+            }
+            XCTAssertEqual(path, self.directory.path)
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.path))
+    }
+
+    func testPrepareMountPointAcceptsExistingEmptyDirectoryThatIsNotAMountPoint() throws {
+        let path = directory.appendingPathComponent("existing")
+        try FileManager.default.createDirectory(at: path, withIntermediateDirectories: false)
+        XCTAssertFalse(try Mounter.prepareMountPoint(path.path))
+        XCTAssertFalse(try Mounter.prepareMountPoint(path.path, isMountPoint: { _ in false }))
+    }
+
+    func testMountRefusesDeviceAlreadyInMountTable() {
+        XCTAssertThrowsError(try Mounter.ensureDeviceNotMounted(
+            devicePath: "/dev/disk99s1",
+            currentMountPoint: { $0 == "/dev/disk99s1" ? "/Volumes/TEST" : nil })) { error in
+            guard case MountError.alreadyMounted(device: "/dev/disk99s1", mountPoint: "/Volumes/TEST") = error else {
+                return XCTFail("Expected already mounted, got \(error)")
+            }
+        }
+        XCTAssertNoThrow(try Mounter.ensureDeviceNotMounted(devicePath: "/dev/disk99s1",
+                                                            currentMountPoint: { _ in nil }))
+    }
+
+    private func partition(volumeName: String?) -> DiskPartition {
+        DiskPartition(deviceIdentifier: "disk99s1", parentWholeDisk: "disk99",
+                      content: "Linux Filesystem", volumeName: volumeName, size: 8192,
+                      mountPoint: nil, isWholeDisk: false)
+    }
+
+    func testDotLabelsFallBackToDeviceIdentifier() {
+        for name in [".", ".."] {
+            XCTAssertEqual(Mounter.defaultMountPoint(partition: partition(volumeName: nil),
+                                                     detection: DetectionResult(filesystem: .ext4, label: name)),
+                           "/Volumes/disk99s1")
+            XCTAssertEqual(Mounter.defaultMountPoint(partition: partition(volumeName: name),
+                                                     detection: DetectionResult(filesystem: .ntfs)),
+                           "/Volumes/disk99s1")
+        }
+        XCTAssertEqual(Mounter.defaultMountPoint(partition: partition(volumeName: nil),
+                                                 detection: DetectionResult(filesystem: .ext4, label: "a/b")),
+                       "/Volumes/a-b")
+        XCTAssertEqual(Mounter.defaultMountPoint(partition: partition(volumeName: nil),
+                                                 detection: DetectionResult(filesystem: .ext4, label: "...")),
+                       "/Volumes/...")
+    }
+
+    func testCommaInVolnameCannotAddMountOptions() {
+        for tool in [ExternalTool.fuse2fs, .ntfs3g] {
+            let options = Mounter.fuseOptions(tool: tool, volname: "x,remove_hiberfile,ro",
+                                              readOnly: false, forceWritable: false)
+            XCTAssertFalse(options.joined(separator: ",").split(separator: ",").contains("remove_hiberfile"),
+                           "\(tool): \(options)")
+            XCTAssertFalse(options.joined(separator: ",").split(separator: ",").contains("ro"),
+                           "\(tool): \(options)")
+            XCTAssertTrue(options.contains("volname=x_remove_hiberfile_ro"), "\(tool): \(options)")
+        }
+        XCTAssertEqual(Mounter.fuseOptions(tool: .ntfs3g, volname: "DATA", readOnly: true, forceWritable: true),
+                       ["local", "allow_other", "volname=DATA", "windows_names", "big_writes",
+                        "remove_hiberfile", "ro"])
+        XCTAssertEqual(Mounter.fuseOptions(tool: .fuse2fs, volname: "LINUX", readOnly: false, forceWritable: false),
+                       ["local", "allow_other", "volname=LINUX"])
+    }
+
     func testReadOnlyExtMountSkipsRepairAndToolLookup() throws {
         try Mounter.preflightExtMount(devicePath: directory.appendingPathComponent("image").path,
                                       deviceIdentifier: "image", readOnly: true,
