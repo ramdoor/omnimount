@@ -115,14 +115,35 @@ done
 FRAMEWORKS="$APP/Contents/Frameworks"
 mkdir -p "$FRAMEWORKS"
 SPARKLE_FW="$SCRATCH/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+[ -d "$SPARKLE_FW" ] || { terr sh.makeApp.noSparkle "$SPARKLE_FW"; exit 1; }
 cp -R "$SPARKLE_FW" "$FRAMEWORKS/"
-install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/Omnimount" 2>/dev/null || true
+# install_name_tool falla si el rpath ya existe: añadirlo solo si falta en
+# alguna arquitectura, y comprobar el resultado en vez de ignorar el error.
+APP_BIN="$APP/Contents/MacOS/Omnimount"
+FW_RPATH="@executable_path/../Frameworks"
+has_rpath() {
+    local arch load_commands
+    for arch in arm64 x86_64; do
+        # Capturar antes de buscar: con pipefail, un grep -q que termina pronto
+        # puede cortar a otool (SIGPIPE) y dar un falso negativo.
+        load_commands="$(otool -arch "$arch" -l "$APP_BIN")" || return 1
+        case "$load_commands" in
+        *"path $FW_RPATH ("*) ;;
+        *) return 1 ;;
+        esac
+    done
+}
+if ! has_rpath; then
+    install_name_tool -add_rpath "$FW_RPATH" "$APP_BIN"
+    has_rpath || { terr sh.makeApp.rpathFailed "$APP_BIN"; exit 1; }
+fi
 
 # Firma. Prioridad: Developer ID Application (distribución, con Hardened
 # Runtime + timestamp, requisito de notarización) → cualquier identidad de
 # desarrollo (el TCC sobrevive a recompilaciones) → ad-hoc.
 # Firmar por hash SHA-1: los nombres pueden ser ambiguos si el llavero tiene
 # copias duplicadas del certificado (p. ej. la de Xcode y la del CSR manual).
+NO_TEAM_ID=""
 DEVID="$(security find-identity -v -p codesigning 2>/dev/null | grep "Developer ID Application" | head -1 | awk '{print $2}' || true)"
 if [ -n "$DEVID" ]; then
     SIGN_ID="$DEVID"
@@ -145,6 +166,14 @@ codesign --force $RUNTIME_FLAGS --preserve-metadata=identifier,entitlements,flag
 codesign --force $RUNTIME_FLAGS --sign "${SIGN_ID:--}" "$SPK"
 
 codesign --force $RUNTIME_FLAGS --identifier org.omnimount.helper --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/OmnimountHelper"
+# El helper solo acepta clientes firmados con su mismo Team ID: una firma
+# ad-hoc o autofirmada (sin Team ID) deja la app sin poder usarlo.
+# Capturar la salida antes de buscar: con pipefail, un grep -q que termina
+# pronto puede cortar a codesign (SIGPIPE) y ocultar el aviso.
+HELPER_SIGNATURE="$(codesign -dvv "$APP/Contents/MacOS/OmnimountHelper" 2>&1 || true)"
+case "$HELPER_SIGNATURE" in
+*"TeamIdentifier=not set"*) NO_TEAM_ID=1 ;;
+esac
 codesign --force $RUNTIME_FLAGS --identifier org.omnimount.cli --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/omnimount-cli"
 # fuse2fs carga libfuse-t (otro equipo): necesita library-validation off.
 [ -f "$APP/Contents/MacOS/fuse2fs" ] && codesign --force $RUNTIME_FLAGS --entitlements "$ENTITLEMENTS" --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/fuse2fs"
@@ -155,4 +184,8 @@ done
 codesign --force $RUNTIME_FLAGS --sign "${SIGN_ID:--}" "$APP"
 echo ""
 t sh.makeApp.created "$APP"
+if [ -n "${NO_TEAM_ID:-}" ]; then
+    echo ""
+    terr sh.makeApp.noTeamId
+fi
 t sh.makeApp.openHint "$APP"

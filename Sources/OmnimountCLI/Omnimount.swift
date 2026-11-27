@@ -19,18 +19,27 @@ struct Omnimount: ParsableCommand {
 
 // MARK: - Utilidades compartidas
 
+/// Fallo en tiempo de ejecución (no de argumentos): ArgumentParser imprime
+/// solo "Error: <mensaje>" y sale con código 1. `ValidationError` queda para
+/// argumentos inválidos, que además muestran el uso y salen con 64.
+struct CLIError: LocalizedError {
+    let message: String
+    init(_ message: String) { self.message = message }
+    var errorDescription: String? { message }
+}
+
 func resolvePartition(_ identifier: String) throws -> DiskPartition {
     let id = identifier.replacingOccurrences(of: "/dev/", with: "")
     let disks = try DiskLister.externalDisks()
     guard let partition = disks.flatMap(\.partitions).first(where: { $0.deviceIdentifier == id }) else {
-        throw ValidationError(L10n.t("cli.common.partitionMissing", id))
+        throw CLIError(L10n.t("cli.common.partitionMissing", id))
     }
     return partition
 }
 
 func requireRoot() throws {
     guard Mounter.isRoot else {
-        throw ValidationError(L10n.t("cli.common.needsRoot"))
+        throw CLIError(L10n.t("cli.common.needsRoot"))
     }
 }
 
@@ -130,12 +139,12 @@ struct Detect: ParsableCommand {
     /// Vuelca los campos BPB del boot sector (FAT/exFAT/NTFS) para diagnóstico.
     private func dumpBootSector(devicePath: String) throws {
         guard let handle = FileHandle(forReadingAtPath: devicePath) else {
-            throw ValidationError(L10n.t("cli.detect.permissions", devicePath))
+            throw CLIError(L10n.t("cli.detect.permissions", devicePath))
         }
         defer { try? handle.close() }
         let bs = try handle.read(upToCount: 512) ?? Data()
         guard bs.count >= 512 else {
-            throw ValidationError(L10n.t("cli.detect.shortSector", String(bs.count)))
+            throw CLIError(L10n.t("cli.detect.shortSector", String(bs.count)))
         }
         func u8(_ o: Int) -> Int { Int(bs[o]) }
         func u16(_ o: Int) -> Int { Int(bs[o]) | (Int(bs[o + 1]) << 8) }
@@ -248,7 +257,7 @@ struct Unmount: ParsableCommand {
             guard let current = part.mountPoint
                 ?? Mounter.currentMountPoint(devicePath: part.devicePath)
                 ?? Mounter.derivedMountPoint(partition: part) else {
-                throw ValidationError(L10n.t("error.unmount.notMounted", part.deviceIdentifier))
+                throw CLIError(L10n.t("error.unmount.notMounted", part.deviceIdentifier))
             }
             mountPoint = current
         }
@@ -283,7 +292,7 @@ struct Test: ParsableCommand {
             try payload.write(toFile: testFile, atomically: false, encoding: .utf8)
             let readBack = try String(contentsOfFile: testFile, encoding: .utf8)
             guard readBack == payload else {
-                throw ValidationError(L10n.t("cli.test.mismatch"))
+                throw CLIError(L10n.t("cli.test.mismatch"))
             }
             try FileManager.default.removeItem(atPath: testFile)
             print("    \(L10n.t("cli.test.ok"))")
@@ -440,12 +449,12 @@ struct Unhide: ParsableCommand {
 
         let mbrPath = "/dev/r\(wholeDisk)"
         guard let readHandle = FileHandle(forReadingAtPath: mbrPath) else {
-            throw ValidationError(L10n.t("cli.unhide.read", mbrPath))
+            throw CLIError(L10n.t("cli.unhide.read", mbrPath))
         }
         var mbr = try readHandle.read(upToCount: 512) ?? Data()
         try readHandle.close()
         guard mbr.count == 512, mbr[510] == 0x55, mbr[511] == 0xAA else {
-            throw ValidationError(L10n.t("cli.unhide.badMbr"))
+            throw CLIError(L10n.t("cli.unhide.badMbr"))
         }
 
         let typeOffset = 446 + 16 * (slice - 1) + 4
@@ -476,7 +485,7 @@ struct Unhide: ParsableCommand {
 
         mbr[typeOffset] = visibleType
         guard let writeHandle = FileHandle(forWritingAtPath: mbrPath) else {
-            throw ValidationError(L10n.t("cli.unhide.write", mbrPath))
+            throw CLIError(L10n.t("cli.unhide.write", mbrPath))
         }
         try writeHandle.write(contentsOf: mbr)
         try writeHandle.synchronize()
@@ -512,9 +521,9 @@ struct Doctor: ParsableCommand {
             print(L10n.t("cli.doctor.noFuse"))
         }
         line("fuse2fs (ext2/3/4)", d.fuse2fs, hint: L10n.t("cli.doctor.fuse2fsHint"))
-        line("ntfs-3g (NTFS)", d.ntfs3g, hint: "brew install gromgit/fuse/ntfs-3g-mac")
-        line(L10n.t("cli.doctor.e2fsck"), d.e2fsck, hint: "brew install e2fsprogs")
-        line(L10n.t("cli.doctor.ntfsfix"), d.ntfsfix, hint: "brew install gromgit/fuse/ntfs-3g-mac")
+        line("ntfs-3g (NTFS)", d.ntfs3g, hint: L10n.t("cli.doctor.ntfs3gHint"))
+        line(L10n.t("cli.doctor.e2fsck"), d.e2fsck, hint: L10n.t("cli.doctor.e2fsckHint"))
+        line(L10n.t("cli.doctor.ntfsfix"), d.ntfsfix, hint: L10n.t("cli.doctor.ntfs3gHint"))
 
         print("")
         if d.canMountExt && d.canMountNTFS {

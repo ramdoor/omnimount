@@ -86,7 +86,6 @@ enum L10nTable {
         "error.format.slash": .init(en: "cannot contain '/'", es: "no puede contener '/'"),
         "error.format.extLength": .init(en: "at most 16 bytes on ext*", es: "máximo 16 bytes en ext*"),
         "error.format.fatLength": .init(en: "at most 11 characters on FAT32", es: "máximo 11 caracteres en FAT32"),
-        "error.format.stillMounted": .init(en: "%@ is still mounted", es: "%@ sigue montada"),
         "error.format.mbrType": .init(en: ", MBR type %@", es: ", tipo MBR %@"),
         "error.format.summary": .init(en: "%@ formatted as %@ «%@»%@", es: "%@ formateada como %@ «%@»%@"),
         // error.helper
@@ -103,6 +102,14 @@ enum L10nTable {
         "error.helper.notResponding": .init(en: "The helper is not responding: %@", es: "El helper no responde: %@"),
         "error.helper.noProxy": .init(en: "Could not create the XPC proxy.", es: "No se pudo crear el proxy XPC."),
         "error.helper.timeout": .init(en: "The helper did not respond in time.", es: "El helper no respondió a tiempo."),
+        // helper: operación en curso, destino y origen de las imágenes
+        "error.helper.busy": .init(en: "%@ already has an operation in progress. Wait for it to finish and try again.", es: "%@ ya tiene una operación en curso. Espera a que termine y vuelve a intentarlo."),
+        "error.clone.folderAccess": .init(en: "You cannot create files in %@, or the folder does not exist. Choose a folder of yours.", es: "No puedes crear archivos en %@ o la carpeta no existe. Elige una carpeta tuya."),
+        "error.clone.notYours": .init(en: "%@ already exists and does not belong to you. Choose another name.", es: "%@ ya existe y no te pertenece. Elige otro nombre."),
+        "error.clone.stalePartial": .init(en: "%@ already exists and is not a file of yours from an earlier clone. Delete it or choose another name.", es: "%@ ya existe y no es un archivo tuyo de un clonado anterior. Bórralo o elige otro nombre."),
+        "error.clone.readAccess": .init(en: "You cannot read %@, or it does not exist.", es: "No puedes leer %@ o no existe."),
+        "error.clone.notFile": .init(en: "%@ is not a regular file.", es: "%@ no es un archivo normal."),
+        "error.clone.badName": .init(en: "%@ is not a valid name for an image file.", es: "%@ no es un nombre válido para un archivo de imagen."),
         // disk.list
         "disk.list.empty": .init(en: "No external disks connected.", es: "No hay discos externos conectados."),
         // app.menu
@@ -313,5 +320,21 @@ enum L10nTable {
         "cli.doctor.ready": .init(en: "All set: Omnimount can mount ext2/3/4 and NTFS.", es: "Todo listo: Omnimount puede montar ext2/3/4 y NTFS."),
         "cli.doctor.noExt": .init(en: "ext2/3/4 still cannot be mounted.", es: "Aún no se puede montar ext2/3/4."),
         "cli.doctor.noNtfs": .init(en: "NTFS still cannot be mounted.", es: "Aún no se puede montar NTFS."),
+        // error.mount (comprobaciones previas al montaje)
+        "error.mount.alreadyMounted": .init(en: "%@ is already mounted at %@. Eject it first.", es: "%@ ya está montado en %@. Expúlsalo primero."),
+        "error.mount.pointInUse": .init(en: "%@ is already in use by another volume. Eject it in Finder and try again.", es: "%@ ya está en uso por otro volumen. Expúlsalo desde el Finder y vuelve a intentarlo."),
+        "error.clone.misaligned": .init(en: "The image size (%@ bytes) is not a multiple of the target's block size (%@ bytes). It is probably incomplete or not a raw disk image.", es: "El tamaño de la imagen (%@ bytes) no es múltiplo del tamaño de bloque del destino (%@ bytes). Probablemente está incompleta o no es una imagen de disco en bruto."),
+        // disco ocupado, disco cambiado, firma del helper, pistas de doctor
+        "app.alert.diskBusy": .init(en: "%@ is busy with another operation. Wait for it to finish.", es: "%@ está ocupado con otra operación. Espera a que termine."),
+        "app.alert.diskChanged": .init(en: "The disk at %@ changed since you chose it (removed or replaced). Nothing was erased; check it and try again.", es: "El disco en %@ cambió desde que lo elegiste (se extrajo o se sustituyó). No se ha borrado nada; revísalo y vuelve a intentarlo."),
+        "app.alert.formatEjectFailed": .init(en: "%@ could not be ejected before formatting, so nothing was erased: %@", es: "No se pudo expulsar %@ antes de formatear, así que no se ha borrado nada: %@"),
+        "app.alert.repairBusy":.init(en: "Wait for the running operations to finish before repairing the helper.", es: "Espera a que terminen las operaciones en curso antes de reparar el helper."),
+        "error.helper.signingRejected": .init(en: "this build is not signed with an Apple Team ID (ad-hoc), so the helper rejects it. See Setup.", es: "esta compilación no está firmada con un Team ID de Apple (ad-hoc), así que el helper la rechaza. Mira Configuración."),
+        "app.setup.signingDetail": .init(en: "This build is not signed with an Apple Team ID (ad-hoc signature). The helper only accepts apps signed with its Team ID, so \"Repair helper\" and Full Disk Access cannot fix this. Rebuild with an Apple Development or Developer ID identity in your keychain, or use the signed release. Mounting and ejecting still work through the administrator password prompt if the `omnimount` CLI is installed.", es: "Esta compilación no está firmada con un Team ID de Apple (firma ad-hoc). El helper solo acepta apps firmadas con su Team ID, así que ni \"Reparar helper\" ni el Acceso total al disco lo solucionan. Vuelve a compilar con una identidad Apple Development o Developer ID en el llavero, o usa la versión firmada. Montar y expulsar siguen funcionando con la contraseña de administrador si el CLI `omnimount` está instalado."),
+        "app.setup.fdaNeedsHelper": .init(en: "Not applicable until the helper can run.", es: "No aplica hasta que el helper pueda funcionar."),
+        "app.setup.helperError": .init(en: "Last error: %@", es: "Último error: %@"),
+        "app.setup.helperOutdated": .init(en: "The running helper uses protocol %@ but this app needs %@ (an old helper is still running). \"Repair helper\" restarts it.", es: "El helper en marcha usa el protocolo %@ pero esta app necesita el %@ (sigue corriendo un helper antiguo). \"Reparar helper\" lo reinicia."),
+        "cli.doctor.ntfs3gHint": .init(en: "build it with `make ntfs3g`, then run `make install` to bundle it into the app (or run omnimount from the repository root, where vendor/bin is found); Homebrew's ntfs-3g-mac links macFUSE and is not supported", es: "compílalo con `make ntfs3g` y después ejecuta `make install` para incluirlo en la app (o ejecuta omnimount desde la raíz del repositorio, donde se encuentra vendor/bin); el ntfs-3g-mac de Homebrew enlaza macFUSE y no está soportado"),
+        "cli.doctor.e2fsckHint": .init(en: "build it with `make fuse2fs`, then run `make install` to bundle it into the app (or run omnimount from the repository root, where vendor/bin is found)", es: "compílalo con `make fuse2fs` y después ejecuta `make install` para incluirlo en la app (o ejecuta omnimount desde la raíz del repositorio, donde se encuentra vendor/bin)"),
     ]
 }

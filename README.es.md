@@ -87,7 +87,7 @@ notarizado.)
 ### 3. Omnimount
 
 ```sh
-make install    # CLI en /opt/homebrew/bin/omnimount + app en /Applications
+make install    # CLI en $(brew --prefix)/bin/omnimount + app en /Applications
 ```
 
 Verifica el estado de todo:
@@ -114,11 +114,14 @@ Configuración recomendada (app + helper, sin contraseñas):
    (Cmd+Mayús+G para escribir la ruta).
 
 Para usar el CLI con sudo, concede Acceso total al disco también a tu
-terminal y a `/opt/homebrew/bin/omnimount`.
+terminal y al binario `omnimount`.
 
 ⚠️ **Nota para desarrolladores**: TCC liga el permiso a la firma del binario.
 Compila con una identidad estable (el Makefile usa tu primera identidad de
 desarrollo) o tendrás que renovar el permiso tras cada build.
+El helper privilegiado solo acepta clientes firmados con su mismo Team ID, así
+que una build ad-hoc o autofirmada no puede usarlo; `make app` muestra un aviso
+en ese caso. Usa una identidad Apple Development para probar el helper.
 
 ## Uso del CLI
 

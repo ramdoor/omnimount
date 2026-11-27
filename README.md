@@ -85,7 +85,7 @@ pre-built, signed and notarized.)
 ### 3. Omnimount
 
 ```sh
-make install    # CLI at /opt/homebrew/bin/omnimount + app in /Applications
+make install    # CLI at $(brew --prefix)/bin/omnimount + app in /Applications
 ```
 
 Check the state of everything:
@@ -117,6 +117,9 @@ the `omnimount` binary as well.
 ⚠️ **Developer note**: TCC binds the permission to the binary's code
 signature. Build with a stable identity (the Makefile picks your first
 development identity) or you'll have to re-grant after every build.
+The privileged helper only accepts clients signed with its own Team ID, so an
+ad-hoc or self-signed build cannot use it; `make app` prints a warning in that
+case. Use an Apple Development identity to test the helper.
 
 ## CLI usage
 

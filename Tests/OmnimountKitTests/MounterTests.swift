@@ -86,6 +86,137 @@ final class MounterTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: file), contents)
     }
 
+    func testPrepareMountPointRejectsSymlinkToDirectory() throws {
+        let target = directory.appendingPathComponent("target")
+        let link = directory.appendingPathComponent("link")
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: false)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+        XCTAssertThrowsError(try Mounter.prepareMountPoint(link.path, isMountPoint: { _ in false }))
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: link.path), target.path)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: target.path))
+    }
+
+    func testPrepareMountPointRejectsDirectoryThatIsAlreadyAMountPoint() throws {
+        XCTAssertThrowsError(try Mounter.prepareMountPoint(directory.path,
+                                                           isMountPoint: { $0 == self.directory.path })) { error in
+            guard case MountError.mountPointInUse(let path) = error else {
+                return XCTFail("Expected mount point in use, got \(error)")
+            }
+            XCTAssertEqual(path, self.directory.path)
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.path))
+    }
+
+    func testPrepareMountPointAcceptsExistingEmptyDirectoryThatIsNotAMountPoint() throws {
+        let path = directory.appendingPathComponent("existing")
+        try FileManager.default.createDirectory(at: path, withIntermediateDirectories: false)
+        XCTAssertFalse(try Mounter.prepareMountPoint(path.path))
+        XCTAssertFalse(try Mounter.prepareMountPoint(path.path, isMountPoint: { _ in false }))
+    }
+
+    func testMountRefusesDeviceAlreadyInMountTable() {
+        XCTAssertThrowsError(try Mounter.ensureDeviceNotMounted(
+            devicePath: "/dev/disk99s1",
+            currentMountPoint: { $0 == "/dev/disk99s1" ? "/Volumes/TEST" : nil })) { error in
+            guard case MountError.alreadyMounted(device: "/dev/disk99s1", mountPoint: "/Volumes/TEST") = error else {
+                return XCTFail("Expected already mounted, got \(error)")
+            }
+        }
+        XCTAssertNoThrow(try Mounter.ensureDeviceNotMounted(devicePath: "/dev/disk99s1",
+                                                            currentMountPoint: { _ in nil }))
+    }
+
+    private func partition(volumeName: String?) -> DiskPartition {
+        DiskPartition(deviceIdentifier: "disk99s1", parentWholeDisk: "disk99",
+                      content: "Linux Filesystem", volumeName: volumeName, size: 8192,
+                      mountPoint: nil, isWholeDisk: false)
+    }
+
+    func testDotLabelsFallBackToDeviceIdentifier() {
+        for name in [".", ".."] {
+            XCTAssertEqual(Mounter.defaultMountPoint(partition: partition(volumeName: nil),
+                                                     detection: DetectionResult(filesystem: .ext4, label: name)),
+                           "/Volumes/disk99s1")
+            XCTAssertEqual(Mounter.defaultMountPoint(partition: partition(volumeName: name),
+                                                     detection: DetectionResult(filesystem: .ntfs)),
+                           "/Volumes/disk99s1")
+        }
+        XCTAssertEqual(Mounter.defaultMountPoint(partition: partition(volumeName: nil),
+                                                 detection: DetectionResult(filesystem: .ext4, label: "a/b")),
+                       "/Volumes/a-b")
+        XCTAssertEqual(Mounter.defaultMountPoint(partition: partition(volumeName: nil),
+                                                 detection: DetectionResult(filesystem: .ext4, label: "...")),
+                       "/Volumes/...")
+    }
+
+    func testCommaInVolnameCannotAddMountOptions() {
+        for tool in [ExternalTool.fuse2fs, .ntfs3g] {
+            let options = Mounter.fuseOptions(tool: tool, volname: "x,remove_hiberfile,ro",
+                                              readOnly: false, forceWritable: false)
+            XCTAssertFalse(options.joined(separator: ",").split(separator: ",").contains("remove_hiberfile"),
+                           "\(tool): \(options)")
+            XCTAssertFalse(options.joined(separator: ",").split(separator: ",").contains("ro"),
+                           "\(tool): \(options)")
+            XCTAssertTrue(options.contains("volname=x_remove_hiberfile_ro"), "\(tool): \(options)")
+        }
+        XCTAssertEqual(Mounter.fuseOptions(tool: .ntfs3g, volname: "DATA", readOnly: true, forceWritable: true),
+                       ["local", "allow_other", "windows_names", "big_writes",
+                        "remove_hiberfile", "ro", "volname=DATA"])
+        XCTAssertEqual(Mounter.fuseOptions(tool: .fuse2fs, volname: "LINUX", readOnly: false, forceWritable: false),
+                       ["local", "allow_other", "volname=LINUX"])
+    }
+
+    /// Divide una cadena -o como fuse_opt: "\" escapa el carácter siguiente
+    /// y "," separa opciones (comprobado con libfuse-t 1.2.9).
+    private func fuseOptSplit(_ joined: String) -> [String] {
+        var options: [String] = [], current = "", escaped = false
+        for character in joined {
+            if escaped { current.append(character); escaped = false }
+            else if character == "\\" { escaped = true }
+            else if character == "," { options.append(current); current = "" }
+            else { current.append(character) }
+        }
+        if escaped { current.append("\\") }
+        options.append(current)
+        return options
+    }
+
+    func testBackslashAndControlCharactersInVolnameCannotAbsorbOptions() {
+        let labels = ["x\\", "a\\,b", "line\nbreak", "tab\there\u{7F}", "a\\b"]
+        for tool in [ExternalTool.fuse2fs, .ntfs3g] {
+            let expected = Mounter.fuseOptions(tool: tool, volname: "NAME", readOnly: true, forceWritable: false)
+            for label in labels {
+                let options = Mounter.fuseOptions(tool: tool, volname: label, readOnly: true, forceWritable: false)
+                let parsed = fuseOptSplit(options.joined(separator: ","))
+                XCTAssertTrue(parsed.contains("ro"), "\(tool) \(label.debugDescription): \(parsed)")
+                XCTAssertEqual(parsed.count, expected.count, "\(tool) \(label.debugDescription): \(parsed)")
+                XCTAssertEqual(parsed.filter { !$0.hasPrefix("volname=") }, expected.filter { !$0.hasPrefix("volname=") },
+                               "\(tool) \(label.debugDescription): \(parsed)")
+                let volname = parsed.first { $0.hasPrefix("volname=") } ?? ""
+                XCTAssertFalse(volname.contains { $0 == "\\" || $0 == "," || $0.isNewline },
+                               "\(tool) \(label.debugDescription): \(volname.debugDescription)")
+                XCTAssertFalse(volname.unicodeScalars.contains { $0.properties.generalCategory == .control },
+                               "\(tool) \(label.debugDescription): \(volname.debugDescription)")
+            }
+        }
+        XCTAssertTrue(Mounter.fuseOptions(tool: .fuse2fs, volname: "x\\", readOnly: false, forceWritable: false)
+                        .contains("volname=x_"))
+        XCTAssertTrue(Mounter.fuseOptions(tool: .fuse2fs, volname: "a\\,b", readOnly: false, forceWritable: false)
+                        .contains("volname=a__b"))
+        XCTAssertTrue(Mounter.fuseOptions(tool: .fuse2fs, volname: "line\nbreak", readOnly: false, forceWritable: false)
+                        .contains("volname=linebreak"))
+        XCTAssertEqual(Mounter.fuseOptions(tool: .fuse2fs, volname: "\n\t", readOnly: true, forceWritable: false),
+                       ["local", "allow_other", "ro"])
+    }
+
+    func testOrdinaryVolnamesAreUnchanged() {
+        for label in ["My Disk", "Fotos Año 2024", "データ", "Резерв", "v1.2-final_copy", "...", "a=b"] {
+            XCTAssertTrue(Mounter.fuseOptions(tool: .ntfs3g, volname: label, readOnly: false, forceWritable: false)
+                            .contains("volname=\(label)"), label)
+        }
+    }
+
     func testReadOnlyExtMountSkipsRepairAndToolLookup() throws {
         try Mounter.preflightExtMount(devicePath: directory.appendingPathComponent("image").path,
                                       deviceIdentifier: "image", readOnly: true,
@@ -331,7 +462,55 @@ final class MounterTests: XCTestCase {
         }
     }
 
+    func testMountOutputParsing() {
+        let output = """
+        /dev/disk3s1s1 on / (apfs, sealed, local, read-only, journaled)
+        /dev/disk4s10 on /Volumes/Other (msdos, local, nodev, nosuid)
+        fuse-t:/LINUX on /Volumes/LINUX (nfs, nodev, nosuid, mounted by root)
+        /dev/disk4s1 on /Volumes/Backup on USB (msdos, local, nodev, nosuid)
+        /dev/disk5s1 on /Volumes/Data (2024) (fuse, local)
+        malformed line without separator
+        """
+        XCTAssertEqual(Mounter.mountPoint(inMountOutput: output, devicePath: "/dev/disk4s1"),
+                       "/Volumes/Backup on USB")
+        XCTAssertEqual(Mounter.mountPoint(inMountOutput: output, devicePath: "/dev/disk4s10"),
+                       "/Volumes/Other")
+        XCTAssertEqual(Mounter.mountPoint(inMountOutput: output, devicePath: "/dev/disk5s1"),
+                       "/Volumes/Data (2024)")
+        XCTAssertEqual(Mounter.mountPoint(inMountOutput: output, devicePath: "/dev/disk3s1s1"), "/")
+        XCTAssertNil(Mounter.mountPoint(inMountOutput: output, devicePath: "/dev/disk4"))
+        XCTAssertNil(Mounter.mountPoint(inMountOutput: output, devicePath: "/dev/disk9s1"))
+    }
+
     private func result(_ status: Int32) -> ShellResult {
         ShellResult(exitCode: status, stdout: "diagnostic output", stderr: "")
+    }
+
+    // MARK: - Punto de montaje derivado (FUSE-T)
+
+    func testDerivedMountPointRequiresFuseTSource() {
+        let candidate = "/Volumes/LINUX"
+        let cases: [(isMountPoint: Bool, source: String?, expected: String?)] = [
+            (true, "fuse-t:/LINUX", candidate),
+            (true, "//user@server/share", nil),
+            (true, "/dev/disk5s1", nil),
+            (true, nil, nil),
+            (false, "fuse-t:/LINUX", nil),
+        ]
+        for item in cases {
+            XCTAssertEqual(Mounter.fuseTMountPoint(candidate,
+                                                   isMountPoint: { _ in item.isMountPoint },
+                                                   mountSource: { _ in item.source }),
+                           item.expected, String(describing: item))
+        }
+    }
+
+    func testMountSourceReadsTheMountedFilesystem() throws {
+        let root = try XCTUnwrap(Mounter.mountSource("/"))
+        XCTAssertFalse(root.isEmpty)
+        XCTAssertFalse(root.hasPrefix("fuse-t:"))
+        XCTAssertNil(Mounter.mountSource(directory.appendingPathComponent("missing").path))
+        // Una carpeta normal no es un punto de montaje.
+        XCTAssertNil(Mounter.fuseTMountPoint(directory.path))
     }
 }

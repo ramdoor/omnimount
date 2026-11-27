@@ -28,7 +28,7 @@ public enum HelperConstants {
     func mount(deviceIdentifier: String, readOnly: Bool,
                reply: @escaping (Bool, String) -> Void)
 
-    /// Desmonta una partición (por identificador o punto de montaje).
+    /// Desmonta una partición externa, indicada por su identificador (disk4s1).
     func unmount(target: String,
                  reply: @escaping (Bool, String) -> Void)
 

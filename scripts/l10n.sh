@@ -42,8 +42,12 @@ sh.makeApp.missingTool	WARNING: vendor/bin/%@ is missing (scripts/build-ntfs3g.s
 sh.makeApp.signingDist	==> Signing for distribution: %@	==> Firmando para distribución: %@
 sh.makeApp.signingDev	==> Development signature: %@	==> Firma de desarrollo: %@
 sh.makeApp.created	==> Created %@	==> Creado %@
+sh.makeApp.noSparkle	ERROR: Sparkle.framework not found at %@ (run swift build to fetch it).	ERROR: no se encuentra Sparkle.framework en %@ (ejecuta swift build para descargarlo).
+sh.makeApp.rpathFailed	ERROR: could not add the Frameworks rpath to %@.	ERROR: no se pudo añadir el rpath de Frameworks a %@.
+sh.makeApp.noTeamId	WARNING: this build has no Team ID (ad-hoc or self-signed). The privileged helper rejects clients not signed with its own Team ID, so this app will not be able to use it. Sign with an Apple Development identity (Xcode > Settings > Accounts) to test the helper.	AVISO: esta build no tiene Team ID (firma ad-hoc o autofirmada). El helper privilegiado rechaza clientes que no estén firmados con su mismo Team ID, así que esta app no podrá usarlo. Firma con una identidad Apple Development (Xcode > Ajustes > Cuentas) para probar el helper.
 sh.makeApp.openHint	Open it with: open "%@"	Ábrela con: open "%@"
 sh.release.usage	Usage: release.sh [--skip-notarize]	Uso: release.sh [--skip-notarize]
+sh.release.noAppcastTool	ERROR: vendor/bin/generate_appcast is missing (it ships with Sparkle). Place it there before releasing.	ERROR: falta vendor/bin/generate_appcast (se distribuye con Sparkle). Colócalo ahí antes de la release.
 sh.release.stepApp	=== 1/4 Signed app ===	=== 1/4 App firmada ===
 sh.release.needAppId	ERROR: the release requires a Developer ID Application signature.	ERROR: la release requiere firma Developer ID Application.
 sh.release.versionMismatch	ERROR: app %@ and release %@ do not match.	ERROR: app %@ y release %@ no coinciden.
@@ -75,6 +79,8 @@ sh.checkNtfs.missingFuseT	ERROR: %@ (%@) does not link libfuse-t.dylib. Run make
 sh.checkNtfs.oldMacOS	ERROR: %@ (%@) requires macOS %@; Omnimount supports 13+. Rebuild with MACOSX_DEPLOYMENT_TARGET=13.0 make ntfs3g.	ERROR: %@ (%@) requiere macOS %@; Omnimount soporta 13+. Recompila con MACOSX_DEPLOYMENT_TARGET=13.0 make ntfs3g.
 sh.buildNtfs.downloading	==> Downloading ntfs-3g %@	==> Descargando ntfs-3g %@
 sh.buildNtfs.noConfigure	ERROR: ntfs-3g source has no configure: %@	ERROR: fuente ntfs-3g sin configure: %@
+sh.buildNtfs.noPkgConfig	ERROR: pkg-config is not installed (brew install pkg-config).	ERROR: pkg-config no está instalado (brew install pkg-config).
+sh.buildNtfs.noFuseTPc	ERROR: pkg-config cannot find fuse-t.pc (expected in /usr/local/lib/pkgconfig). Reinstall FUSE-T.	ERROR: pkg-config no encuentra fuse-t.pc (debería estar en /usr/local/lib/pkgconfig). Reinstala FUSE-T.
 sh.buildFuse.noMacFuse	ERROR: macFUSE is not installed.	ERROR: macFUSE no está instalado.
 sh.buildFuse.installMacFuse	  brew install --cask macfuse (and approve the extension in System Settings)	  brew install --cask macfuse (y aprueba la extensión en Ajustes del Sistema)
 sh.buildFuse.noFuse3	ERROR: fuse3.pc was not found (incomplete macFUSE install?)	ERROR: no se encuentra fuse3.pc (¿instalación de macFUSE incompleta?)
@@ -90,6 +96,11 @@ sh.buildFuse.missingAnchor	a unique option-parsing site was not found	no se enco
 sh.buildFuse.compilingIntel	==> Compiling x86_64 (configure runs its tests under Rosetta)	==> Compilando x86_64 (configure corre sus tests bajo Rosetta)
 sh.buildFuse.oldMacOS	ERROR: %@ (%@) requires macOS %@; rebuild with MACOSX_DEPLOYMENT_TARGET=13.0.	ERROR: %@ (%@) requiere macOS %@; recompila con MACOSX_DEPLOYMENT_TARGET=13.0.
 sh.buildFuse.notFuseT	ERROR: fuse2fs (%@) is not linked exclusively against FUSE-T.	ERROR: fuse2fs (%@) no está enlazado exclusivamente contra FUSE-T.
+sh.buildFuse.noHeaders	ERROR: FUSE-T headers (fuse.h) not found in %@ or %@.	ERROR: no se encuentran las cabeceras de FUSE-T (fuse.h) en %@ ni en %@.
+sh.buildFuse.spaceInPath	ERROR: the build directory must not contain spaces: %@	ERROR: el directorio de compilación no puede contener espacios: %@
+sh.buildFuse.badChecksum	ERROR: SHA-256 mismatch for %@ (expected %@, got %@); file removed.	ERROR: SHA-256 no coincide para %@ (esperado %@, obtenido %@); fichero eliminado.
+sh.buildFuse.unpinned	WARNING: no pinned SHA-256 for e2fsprogs %@; download integrity not verified.	AVISO: no hay SHA-256 fijado para e2fsprogs %@; no se verifica la integridad de la descarga.
+sh.buildFuse.failedLog	ERROR: build step failed. Full log: %@ (last lines below):	ERROR: falló un paso de la compilación. Log completo: %@ (últimas líneas abajo):
 EOF
 }
 

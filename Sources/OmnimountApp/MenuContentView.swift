@@ -56,6 +56,7 @@ struct MenuContentView: View {
                             mountController.fixQuotaAndMount(target) { monitor.refresh() }
                         }
                         .controlSize(.small)
+                        .disabled(mountController.busy.isDiskBusy(target.parentWholeDisk))
                         Button(L10n.t("app.common.cancel")) { mountController.quotaFixTarget = nil }
                             .controlSize(.small)
                     }
@@ -205,20 +206,20 @@ private struct DiskSection: View {
                     Button(L10n.t("app.menu.cloneDisk")) {
                         mountController.cloneToImage(
                             identifier: disk.deviceIdentifier,
+                            wholeDisk: disk.deviceIdentifier,
                             suggestedName: disk.mediaName ?? disk.deviceIdentifier,
                             totalBytes: disk.size) { monitor.refresh() }
                     }
                     Button(L10n.t("app.menu.restoreDisk"), role: .destructive) {
-                        mountController.restoreImage(
-                            identifier: disk.deviceIdentifier,
-                            displayName: disk.mediaName ?? disk.deviceIdentifier) { monitor.refresh() }
+                        mountController.restoreImage(disk: disk) { monitor.refresh() }
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
                 .menuStyle(.borderlessButton)
                 .frame(width: 24)
-                .disabled(mountController.cloneLabel != nil)
+                .disabled(mountController.cloneLabel != nil
+                          || mountController.busy.isDiskBusy(disk.deviceIdentifier))
                 .help(L10n.t("app.menu.cloneHelp"))
             }
             ForEach(disk.partitions) { partition in
@@ -237,8 +238,15 @@ private struct PartitionRow: View {
         monitor.mountedByOmnimount[partition.deviceIdentifier] ?? partition.mountPoint
     }
 
+    /// Esta partición es el destino de la operación en curso.
     private var isBusy: Bool {
-        mountController.busyPartitions.contains(partition.deviceIdentifier)
+        mountController.busy.isTarget(partition.deviceIdentifier)
+    }
+
+    /// Hay una operación en curso en este disco (en esta u otra partición,
+    /// o sobre el disco entero): las acciones quedan desactivadas.
+    private var isDiskBusy: Bool {
+        mountController.busy.isDiskBusy(partition.parentWholeDisk)
     }
 
     var body: some View {
@@ -261,6 +269,7 @@ private struct PartitionRow: View {
                         mountController.makeWritable(partition) { monitor.refresh() }
                     }
                     .tint(.orange)
+                    .disabled(isDiskBusy)
                     .help(L10n.t("app.menu.readOnlyHelp"))
                 }
                 Button {
@@ -272,19 +281,23 @@ private struct PartitionRow: View {
                 Button(L10n.t("app.menu.eject")) {
                     mountController.unmount(partition) { monitor.refresh() }
                 }
+                .disabled(isDiskBusy)
             } else {
                 Button(L10n.t("app.menu.mount")) {
                     mountController.mount(partition) { monitor.refresh() }
                 }
+                .disabled(isDiskBusy)
             }
 
             Menu {
                 Button(L10n.t("app.menu.clonePartition")) {
                     mountController.cloneToImage(
                         identifier: partition.deviceIdentifier,
+                        wholeDisk: partition.parentWholeDisk,
                         suggestedName: partition.volumeName ?? partition.deviceIdentifier,
                         totalBytes: partition.size) { monitor.refresh() }
                 }
+                .disabled(mountController.cloneLabel != nil)
                 Button(L10n.t("app.menu.format"), role: .destructive) {
                     mountController.formatTarget = partition
                 }
@@ -293,6 +306,7 @@ private struct PartitionRow: View {
             }
             .menuStyle(.borderlessButton)
             .frame(width: 24)
+            .disabled(isDiskBusy)
             .help(L10n.t("app.menu.more"))
         }
         .buttonStyle(.bordered)
