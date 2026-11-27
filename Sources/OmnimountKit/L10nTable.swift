@@ -322,5 +322,7 @@ enum L10nTable {
         "app.setup.fdaNeedsHelper": .init(en: "Not applicable until the helper can run.", es: "No aplica hasta que el helper pueda funcionar."),
         "app.setup.helperError": .init(en: "Last error: %@", es: "Último error: %@"),
         "app.setup.helperOutdated": .init(en: "The running helper uses protocol %@ but this app needs %@ (an old helper is still running). \"Repair helper\" restarts it.", es: "El helper en marcha usa el protocolo %@ pero esta app necesita el %@ (sigue corriendo un helper antiguo). \"Reparar helper\" lo reinicia."),
+        "cli.doctor.ntfs3gHint": .init(en: "build it with `make ntfs3g` (scripts/build-ntfs3g.sh, see README); Homebrew's ntfs-3g-mac links macFUSE and is not supported", es: "compílalo con `make ntfs3g` (scripts/build-ntfs3g.sh, ver README); el ntfs-3g-mac de Homebrew enlaza macFUSE y no está soportado"),
+        "cli.doctor.e2fsckHint": .init(en: "build it with `make fuse2fs` (see README)", es: "compílalo con `make fuse2fs` (ver README)"),
     ]
 }
