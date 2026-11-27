@@ -14,6 +14,10 @@ struct SetupView: View {
     @State private var e2fsckPath: String?
     @State private var helperReachable = false
     @State private var helperHasFDA = false
+    /// Error de la última comprobación del helper (si no respondió).
+    @State private var helperError: String?
+    /// Versión de protocolo de un helper antiguo que sigue en marcha.
+    @State private var helperOutdatedVersion: String?
     @State private var copiedCommand: String?
     @State private var setupNotice: String?
     @AppStorage("menuTextSize") private var menuTextSize = MenuTextSize.normal.rawValue
@@ -67,11 +71,17 @@ struct SetupView: View {
             )
 
             if #available(macOS 13.0, *) {
+                // Build sin Team ID: el helper rechazará la app; registrar,
+                // reparar o dar Acceso total al disco no lo resuelve.
+                let signingRejected = mountController.helper.isRejectedBySigning
                 stepRow(
                     done: mountController.helper.state == .enabled,
                     title: L10n.t("app.setup.helperTitle"),
-                    detail: L10n.t("app.setup.helperDetail"),
+                    detail: signingRejected
+                        ? L10n.t("app.setup.signingDetail")
+                        : L10n.t("app.setup.helperDetail"),
                     actionLabel: mountController.helper.state == .requiresApproval ? L10n.t("app.setup.openLoginItems") : L10n.t("app.common.enableHelper"),
+                    showsAction: !signingRejected,
                     action: {
                         if mountController.helper.state == .requiresApproval {
                             SMAppService.openSystemSettingsLoginItems()
@@ -84,12 +94,11 @@ struct SetupView: View {
                 stepRow(
                     done: helperReachable && helperHasFDA,
                     title: helperFDATitle,
-                    detail: helperNotResponding
-                        ? L10n.t("app.setup.helperStuck")
-                        : L10n.t("app.setup.fdaHint"),
+                    detail: helperFDADetail,
                     actionLabel: helperNotResponding
                         ? L10n.t("app.setup.repairHelper")
                         : L10n.t("app.setup.openFda"),
+                    showsAction: !signingRejected,
                     action: {
                         if helperNotResponding {
                             // Des-registrar mata el daemon: no hacerlo con
@@ -182,6 +191,21 @@ struct SetupView: View {
         }
     }
 
+    private var helperFDADetail: String {
+        if mountController.helper.isRejectedBySigning {
+            return L10n.t("app.setup.fdaNeedsHelper")
+        }
+        if let version = helperOutdatedVersion {
+            return L10n.t("app.setup.helperOutdated", version, HelperConstants.protocolVersion)
+        }
+        if helperNotResponding {
+            let stuck = L10n.t("app.setup.helperStuck")
+            guard let error = helperError else { return stuck }
+            return stuck + "\n" + L10n.t("app.setup.helperError", error)
+        }
+        return L10n.t("app.setup.fdaHint")
+    }
+
     private var helperFDATitle: String {
         if !helperReachable { return L10n.t("app.setup.fdaWaiting") }
         return helperHasFDA
@@ -191,7 +215,8 @@ struct SetupView: View {
 
     @ViewBuilder
     private func stepRow(done: Bool, title: String, detail: String,
-                         actionLabel: String, action: @escaping () -> Void) -> some View {
+                         actionLabel: String, showsAction: Bool = true,
+                         action: @escaping () -> Void) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: done ? "checkmark.circle.fill" : "circle")
                 .foregroundStyle(done ? .green : .red)
@@ -199,7 +224,7 @@ struct SetupView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.body.weight(.medium))
                 Text(detail).font(.caption).foregroundStyle(.secondary)
-                if !done {
+                if !done && showsAction {
                     Button(actionLabel, action: action)
                         .controlSize(.small)
                         .padding(.top, 2)
@@ -296,13 +321,30 @@ struct SetupView: View {
 
         mountController.helper.refreshState()
         if mountController.helper.state == .enabled {
-            mountController.helper.checkFullDiskAccess { reachable, hasFDA in
-                helperReachable = reachable
-                helperHasFDA = hasFDA
+            mountController.helper.probe { result in
+                switch result {
+                case .ok(let hasFDA):
+                    helperReachable = true
+                    helperHasFDA = hasFDA
+                    helperError = nil
+                    helperOutdatedVersion = nil
+                case .outdated(let version):
+                    helperReachable = false
+                    helperHasFDA = false
+                    helperError = nil
+                    helperOutdatedVersion = version
+                case .unreachable(let error):
+                    helperReachable = false
+                    helperHasFDA = false
+                    helperError = error
+                    helperOutdatedVersion = nil
+                }
             }
         } else {
             helperReachable = false
             helperHasFDA = false
+            helperError = nil
+            helperOutdatedVersion = nil
         }
     }
 }

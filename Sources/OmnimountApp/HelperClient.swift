@@ -24,11 +24,24 @@ final class HelperClient: ObservableObject {
         SMAppService.daemon(plistName: HelperConstants.plistName)
     }
 
+    /// Resultado de comprobar la firma de la app frente a la del helper.
+    let trust: HelperTrust = SigningCheck.helperTrust()
+
+    /// true si el helper va a rechazar esta app por su firma (build sin Team
+    /// ID, p. ej. ad-hoc). Registrar o reparar el helper no lo resuelve.
+    var isRejectedBySigning: Bool { trust.rejectsThisApp }
+
     init() { refreshState() }
 
     func refreshState() {
         guard #available(macOS 13.0, *) else {
             state = .unavailable(L10n.t("error.helper.needsMacOS13"))
+            return
+        }
+        // El helper rechazaría todas las conexiones: tratarlo como no
+        // disponible para que montar/expulsar usen el diálogo de administrador.
+        if isRejectedBySigning {
+            state = .unavailable(L10n.t("error.helper.signingRejected"))
             return
         }
         switch service.status {
@@ -42,7 +55,7 @@ final class HelperClient: ObservableObject {
     /// Registra el daemon. Si macOS exige aprobación, abre el panel de
     /// Elementos de inicio para que el usuario lo active.
     func install() {
-        guard #available(macOS 13.0, *) else { refreshState(); return }
+        guard #available(macOS 13.0, *), !isRejectedBySigning else { refreshState(); return }
         do {
             try service.register()
             refreshState()
@@ -72,7 +85,7 @@ final class HelperClient: ObservableObject {
     /// coincidir con el binario nuevo. Des-registrar y volver a registrar la
     /// refresca.
     func repair() {
-        guard #available(macOS 13.0, *) else { return }
+        guard #available(macOS 13.0, *), !isRejectedBySigning else { return }
         try? service.unregister()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.install()
@@ -177,15 +190,34 @@ final class HelperClient: ObservableObject {
         }, completion: completion)
     }
 
-    /// Autotest de Acceso total al disco del helper.
-    /// completion(alcanzable, tieneFDA)
-    func checkFullDiskAccess(completion: @escaping (Bool, Bool) -> Void) {
+    enum Probe: Equatable {
+        /// Responde con la versión de protocolo esperada.
+        case ok(hasFullDiskAccess: Bool)
+        /// Responde, pero con otra versión de protocolo (sigue en marcha un
+        /// helper antiguo).
+        case outdated(helperVersion: String)
+        /// No responde; lleva el texto del error.
+        case unreachable(String)
+    }
+
+    /// Comprueba que el helper responde (`version()`, el saludo previsto en
+    /// el protocolo) y, si es así, su Acceso total al disco.
+    func probe(completion: @escaping (Probe) -> Void) {
         withHelper(timeout: 10, { proxy, finish in
-            proxy.checkFullDiskAccess { hasAccess in
-                finish(true, hasAccess ? "1" : "0")
+            proxy.version { version in finish(true, version) }
+        }, completion: { [weak self] ok, payload in
+            guard let self else { return }
+            guard ok else { completion(.unreachable(payload)); return }
+            guard payload == HelperConstants.protocolVersion else {
+                completion(.outdated(helperVersion: payload)); return
             }
-        }, completion: { reachable, payload in
-            completion(reachable, payload == "1")
+            self.withHelper(timeout: 10, { proxy, finish in
+                proxy.checkFullDiskAccess { hasAccess in
+                    finish(true, hasAccess ? "1" : "0")
+                }
+            }, completion: { ok, payload in
+                completion(ok ? .ok(hasFullDiskAccess: payload == "1") : .unreachable(payload))
+            })
         })
     }
 }

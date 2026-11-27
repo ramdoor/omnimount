@@ -313,9 +313,14 @@ enum L10nTable {
         "cli.doctor.ready": .init(en: "All set: Omnimount can mount ext2/3/4 and NTFS.", es: "Todo listo: Omnimount puede montar ext2/3/4 y NTFS."),
         "cli.doctor.noExt": .init(en: "ext2/3/4 still cannot be mounted.", es: "Aún no se puede montar ext2/3/4."),
         "cli.doctor.noNtfs": .init(en: "NTFS still cannot be mounted.", es: "Aún no se puede montar NTFS."),
-        // audit/app: estado ocupado por disco, identidad del disco, firma, doctor
+        // disco ocupado, disco cambiado, firma del helper, pistas de doctor
         "app.alert.diskBusy": .init(en: "%@ is busy with another operation. Wait for it to finish.", es: "%@ está ocupado con otra operación. Espera a que termine."),
         "app.alert.diskChanged": .init(en: "The disk at %@ changed since you chose it (removed or replaced). Nothing was erased; check it and try again.", es: "El disco en %@ cambió desde que lo elegiste (se extrajo o se sustituyó). No se ha borrado nada; revísalo y vuelve a intentarlo."),
-        "app.alert.repairBusy":.init(en: "Wait for the running operations to finish before repairing the helper.", es: "Espera a que terminen las operaciones en curso antes de reparar el helper."),
+        "app.alert.repairBusy": .init(en: "Wait for the running operations to finish before repairing the helper.", es: "Espera a que terminen las operaciones en curso antes de reparar el helper."),
+        "error.helper.signingRejected": .init(en: "this build is not signed with an Apple Team ID (ad-hoc), so the helper rejects it. See Setup.", es: "esta compilación no está firmada con un Team ID de Apple (ad-hoc), así que el helper la rechaza. Mira Configuración."),
+        "app.setup.signingDetail": .init(en: "This build is not signed with an Apple Team ID (ad-hoc signature). The helper only accepts apps signed with its Team ID, so \"Repair helper\" and Full Disk Access cannot fix this. Rebuild with an Apple Development or Developer ID identity in your keychain, or use the signed release. Mounting and ejecting still work through the administrator password prompt if the `omnimount` CLI is installed.", es: "Esta compilación no está firmada con un Team ID de Apple (firma ad-hoc). El helper solo acepta apps firmadas con su Team ID, así que ni \"Reparar helper\" ni el Acceso total al disco lo solucionan. Vuelve a compilar con una identidad Apple Development o Developer ID en el llavero, o usa la versión firmada. Montar y expulsar siguen funcionando con la contraseña de administrador si el CLI `omnimount` está instalado."),
+        "app.setup.fdaNeedsHelper": .init(en: "Not applicable until the helper can run.", es: "No aplica hasta que el helper pueda funcionar."),
+        "app.setup.helperError": .init(en: "Last error: %@", es: "Último error: %@"),
+        "app.setup.helperOutdated": .init(en: "The running helper uses protocol %@ but this app needs %@ (an old helper is still running). \"Repair helper\" restarts it.", es: "El helper en marcha usa el protocolo %@ pero esta app necesita el %@ (sigue corriendo un helper antiguo). \"Reparar helper\" lo reinicia."),
     ]
 }
