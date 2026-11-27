@@ -416,15 +416,38 @@ public enum Mounter {
     }
 
     /// Deriva el punto de montaje esperado de una partición re-detectando su
-    /// etiqueta y comprueba que está montado de verdad. Necesario con FUSE-T,
-    /// cuyos montajes aparecen como "fuse-t:/<volname>" en mount(8), sin
-    /// rastro del /dev/diskXsY. Requiere poder leer el dispositivo (root+TCC).
+    /// etiqueta y comprueba que ahí hay un montaje de FUSE-T. Necesario con
+    /// FUSE-T, cuyos montajes aparecen como "fuse-t:/<volname>" en mount(8),
+    /// sin rastro del /dev/diskXsY. Otro volumen montado en esa ruta (un
+    /// recurso de red, un disco nativo con la misma etiqueta) no cuenta.
+    /// Requiere poder leer el dispositivo (root+TCC).
     public static func derivedMountPoint(partition: DiskPartition) -> String? {
         guard let detection = try? FilesystemDetector.detect(devicePath: partition.devicePath) else {
             return nil
         }
-        let candidate = defaultMountPoint(partition: partition, detection: detection)
-        return isMountPoint(candidate) ? candidate : nil
+        return fuseTMountPoint(defaultMountPoint(partition: partition, detection: detection))
+    }
+
+    /// `candidate` si es un punto de montaje cuyo origen (f_mntfromname)
+    /// empieza por "fuse-t:"; nil en otro caso.
+    static func fuseTMountPoint(_ candidate: String,
+                                isMountPoint: (String) -> Bool = Mounter.isMountPoint,
+                                mountSource: (String) -> String? = Mounter.mountSource) -> String? {
+        guard isMountPoint(candidate), mountSource(candidate)?.hasPrefix("fuse-t:") == true else {
+            return nil
+        }
+        return candidate
+    }
+
+    /// Origen del sistema de ficheros montado en `path` según statfs
+    /// (f_mntfromname): "/dev/disk4s1", "//user@server/share", "fuse-t:/X"…
+    static func mountSource(_ path: String) -> String? {
+        var info = statfs()
+        guard statfs(path, &info) == 0 else { return nil }
+        return withUnsafeBytes(of: &info.f_mntfromname) { raw in
+            let bytes = raw.prefix { $0 != 0 }
+            return String(decoding: bytes, as: UTF8.self)
+        }
     }
 
     /// Busca el punto de montaje actual de un dispositivo consultando mount(8).

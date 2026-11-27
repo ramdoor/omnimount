@@ -31,9 +31,9 @@ public enum CloneError: Error, LocalizedError {
     case ioError(String)
     /// El usuario que lo pide no puede crear ficheros en esa carpeta.
     case folderAccess(String)
-    /// Ya existe un fichero con ese nombre y no es del usuario que lo pide.
+    /// Ya existe un fichero con ese nombre que el usuario no podría sustituir.
     case notYours(String)
-    /// Hay un `.partial` que no es un fichero del usuario que lo pide.
+    /// Hay un `.partial` que no es un fichero que el usuario podría borrar.
     case stalePartial(String)
     /// El usuario que lo pide no puede leer la imagen (o no existe).
     case readAccess(String)
@@ -397,6 +397,17 @@ struct CallerAccess {
         return group == gid || isMember(group) || mode & bits == bits
     }
 
+    /// Si el usuario podría sustituir (renombrar encima o borrar) un fichero
+    /// existente en una carpeta en la que ya puede escribir y buscar: la
+    /// regla del kernel para unlink/rename. Sin bit sticky, sí; con él, solo
+    /// si el fichero o la carpeta son suyos. Root y los volúmenes con la
+    /// propiedad ignorada, sí.
+    func mayReplace(fileOwner: uid_t, directoryMode: mode_t, directoryOwner: uid_t,
+                    ignoresOwnership: Bool) -> Bool {
+        if uid == 0 || ignoresOwnership { return true }
+        return directoryMode & S_ISVTX == 0 || fileOwner == uid || directoryOwner == uid
+    }
+
     func permits(_ need: Need, _ info: stat, ignoresOwnership: Bool) -> Bool {
         permits(need, mode: info.st_mode, owner: info.st_uid, group: info.st_gid,
                 ignoresOwnership: ignoresOwnership)
@@ -489,8 +500,8 @@ enum PathWalk {
 
 /// Destino de un clon: la carpeta se abre una vez y el resto de pasos
 /// (comprobar, crear el parcial, borrar, renombrar) son relativos a ella.
-/// Con `access` (helper), la carpeta debe permitir escribir al usuario y los
-/// ficheros existentes que se sustituyen deben ser suyos.
+/// Con `access` (helper), la carpeta debe permitir escribir al usuario y un
+/// fichero existente solo se sustituye si el usuario podría hacerlo.
 final class ImageDestination {
     let directory: Int32
     let name: String
@@ -533,14 +544,26 @@ final class ImageDestination {
     func freeBytes() -> Int64? {
         var info = statfs()
         guard fstatfs(directory, &info) == 0 else { return nil }
-        return Int64(info.f_bavail) * Int64(info.f_bsize)
+        return Self.freeBytes(availableBlocks: info.f_bavail, blockSize: info.f_bsize)
     }
 
-    /// Con `access`, un fichero existente solo se sustituye si es del usuario
-    /// (salvo en volúmenes con la propiedad ignorada).
-    private func belongsToCaller(_ info: stat) -> Bool {
+    /// Bloques libres × tamaño de bloque sin desbordar: un valor que no cabe
+    /// en Int64 cuenta como espacio suficiente.
+    static func freeBytes(availableBlocks: UInt64, blockSize: UInt32) -> Int64 {
+        let (product, overflow) = availableBlocks.multipliedReportingOverflow(by: UInt64(blockSize))
+        guard !overflow else { return .max }
+        return Int64(exactly: product) ?? .max
+    }
+
+    /// Con `access`, un fichero existente se sustituye solo si el usuario
+    /// podría hacerlo él mismo (CallerAccess.mayReplace). La escritura y la
+    /// búsqueda en la carpeta ya se comprobaron al abrirla.
+    private func callerMayReplace(_ info: stat) -> Bool {
         guard let access else { return true }
-        return ignoresOwnership || info.st_uid == access.uid
+        var folder = stat()
+        guard fstat(directory, &folder) == 0 else { return false }
+        return access.mayReplace(fileOwner: info.st_uid, directoryMode: folder.st_mode,
+                                 directoryOwner: folder.st_uid, ignoresOwnership: ignoresOwnership)
     }
 
     /// El destino debe no existir o ser un fichero regular (se sustituye al
@@ -550,18 +573,18 @@ final class ImageDestination {
         var info = stat()
         if fstatat(directory, name, &info, AT_SYMLINK_NOFOLLOW) == 0 {
             guard (info.st_mode & S_IFMT) == S_IFREG else { throw CloneError.notRegularFile(imagePath) }
-            guard belongsToCaller(info) else { throw CloneError.notYours(imagePath) }
+            guard callerMayReplace(info) else { throw CloneError.notYours(imagePath) }
         } else if errno != ENOENT {
             throw access == nil ? CloneError.cannotOpen(imagePath) : CloneError.folderAccess(imagePath)
         }
     }
 
     /// Crea el parcial con O_CREAT|O_EXCL|O_NOFOLLOW. Un parcial previo solo
-    /// se borra si es un fichero regular (del usuario, con `access`).
+    /// se borra si es un fichero regular que el usuario podría borrar.
     func createPartial() throws -> FileHandle {
         var info = stat()
         if fstatat(directory, partialName, &info, AT_SYMLINK_NOFOLLOW) == 0 {
-            guard (info.st_mode & S_IFMT) == S_IFREG, belongsToCaller(info) else {
+            guard (info.st_mode & S_IFMT) == S_IFREG, callerMayReplace(info) else {
                 throw CloneError.stalePartial(partialPath)
             }
             guard unlinkat(directory, partialName, 0) == 0 || errno == ENOENT else {
