@@ -168,9 +168,12 @@ codesign --force $RUNTIME_FLAGS --sign "${SIGN_ID:--}" "$SPK"
 codesign --force $RUNTIME_FLAGS --identifier org.omnimount.helper --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/OmnimountHelper"
 # El helper solo acepta clientes firmados con su mismo Team ID: una firma
 # ad-hoc o autofirmada (sin Team ID) deja la app sin poder usarlo.
-if codesign -dvv "$APP/Contents/MacOS/OmnimountHelper" 2>&1 | grep -q '^TeamIdentifier=not set'; then
-    NO_TEAM_ID=1
-fi
+# Capturar la salida antes de buscar: con pipefail, un grep -q que termina
+# pronto puede cortar a codesign (SIGPIPE) y ocultar el aviso.
+HELPER_SIGNATURE="$(codesign -dvv "$APP/Contents/MacOS/OmnimountHelper" 2>&1 || true)"
+case "$HELPER_SIGNATURE" in
+*"TeamIdentifier=not set"*) NO_TEAM_ID=1 ;;
+esac
 codesign --force $RUNTIME_FLAGS --identifier org.omnimount.cli --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/omnimount-cli"
 # fuse2fs carga libfuse-t (otro equipo): necesita library-validation off.
 [ -f "$APP/Contents/MacOS/fuse2fs" ] && codesign --force $RUNTIME_FLAGS --entitlements "$ENTITLEMENTS" --sign "${SIGN_ID:--}" "$APP/Contents/MacOS/fuse2fs"

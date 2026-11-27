@@ -114,7 +114,7 @@ Configuración recomendada (app + helper, sin contraseñas):
    (Cmd+Mayús+G para escribir la ruta).
 
 Para usar el CLI con sudo, concede Acceso total al disco también a tu
-terminal y a `/opt/homebrew/bin/omnimount`.
+terminal y al binario `omnimount`.
 
 ⚠️ **Nota para desarrolladores**: TCC liga el permiso a la firma del binario.
 Compila con una identidad estable (el Makefile usa tu primera identidad de
