@@ -313,5 +313,8 @@ enum L10nTable {
         "cli.doctor.ready": .init(en: "All set: Omnimount can mount ext2/3/4 and NTFS.", es: "Todo listo: Omnimount puede montar ext2/3/4 y NTFS."),
         "cli.doctor.noExt": .init(en: "ext2/3/4 still cannot be mounted.", es: "Aún no se puede montar ext2/3/4."),
         "cli.doctor.noNtfs": .init(en: "NTFS still cannot be mounted.", es: "Aún no se puede montar NTFS."),
+        // audit/app: estado ocupado por disco, identidad del disco, firma, doctor
+        "app.alert.diskBusy": .init(en: "%@ is busy with another operation. Wait for it to finish.", es: "%@ está ocupado con otra operación. Espera a que termine."),
+        "app.alert.repairBusy": .init(en: "Wait for the running operations to finish before repairing the helper.", es: "Espera a que terminen las operaciones en curso antes de reparar el helper."),
     ]
 }

@@ -15,6 +15,7 @@ struct SetupView: View {
     @State private var helperReachable = false
     @State private var helperHasFDA = false
     @State private var copiedCommand: String?
+    @State private var setupNotice: String?
     @AppStorage("menuTextSize") private var menuTextSize = MenuTextSize.normal.rawValue
     @AppStorage("openInNewFinderWindow") private var openInNewFinderWindow = false
 
@@ -91,6 +92,13 @@ struct SetupView: View {
                         : L10n.t("app.setup.openFda"),
                     action: {
                         if helperNotResponding {
+                            // Des-registrar mata el daemon: no hacerlo con
+                            // operaciones en curso.
+                            guard !mountController.hasActiveOperations else {
+                                setupNotice = L10n.t("app.alert.repairBusy")
+                                return
+                            }
+                            setupNotice = nil
                             mountController.helper.repair()
                             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { refresh() }
                         } else if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
@@ -105,6 +113,13 @@ struct SetupView: View {
                 infoRow(
                     title: L10n.t("app.setup.adminTitle"),
                     detail: L10n.t("app.setup.adminDetail"))
+            }
+
+            if let notice = setupNotice {
+                Label(notice, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .padding(.top, 6)
             }
 
             if let copied = copiedCommand {
