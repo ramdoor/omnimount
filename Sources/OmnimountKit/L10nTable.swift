@@ -102,6 +102,8 @@ enum L10nTable {
         "error.helper.notResponding": .init(en: "The helper is not responding: %@", es: "El helper no responde: %@"),
         "error.helper.noProxy": .init(en: "Could not create the XPC proxy.", es: "No se pudo crear el proxy XPC."),
         "error.helper.timeout": .init(en: "The helper did not respond in time.", es: "El helper no respondió a tiempo."),
+        // helper: operación en curso, destino y origen de las imágenes
+        "error.helper.busy": .init(en: "%@ already has an operation in progress. Wait for it to finish and try again.", es: "%@ ya tiene una operación en curso. Espera a que termine y vuelve a intentarlo."),
         // disk.list
         "disk.list.empty": .init(en: "No external disks connected.", es: "No hay discos externos conectados."),
         // app.menu
