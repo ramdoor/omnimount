@@ -48,21 +48,17 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
         }
     }
 
+    /// Solo por identificador de una partición externa: el punto de montaje
+    /// se obtiene del propio disco.
     func unmount(target: String, reply: @escaping (Bool, String) -> Void) {
         do {
-            let mountPoint: String
-            if target.hasPrefix("/") {
-                mountPoint = target
-            } else {
-                let part = try partition(for: target)
-                // Orden: diskutil → mount(8) → derivado por etiqueta (FUSE-T).
-                guard let current = part.mountPoint
-                    ?? Mounter.currentMountPoint(devicePath: part.devicePath)
-                    ?? Mounter.derivedMountPoint(partition: part) else {
-                    reply(false, L10n.t("error.unmount.notMounted", target))
-                    return
-                }
-                mountPoint = current
+            let part = try partition(for: target)
+            // Orden: diskutil → mount(8) → derivado por etiqueta (FUSE-T).
+            guard let mountPoint = part.mountPoint
+                ?? Mounter.currentMountPoint(devicePath: part.devicePath)
+                ?? Mounter.derivedMountPoint(partition: part) else {
+                reply(false, L10n.t("error.unmount.notMounted", target))
+                return
             }
             try Mounter.unmount(mountPoint: mountPoint)
             reply(true, mountPoint)
