@@ -41,10 +41,23 @@ final class DiskOperationGateTests: XCTestCase {
         XCTAssertEqual(try gate.run(on: "disk5s1") { 7 }, 7)
     }
 
-    func testIdentifierThatIsNotADiskIsNotReserved() throws {
+    func testIdentifierThatIsNotADiskIsRefusedWithoutRunning() {
         let gate = DiskOperationGate()
-        try gate.run(on: "not-a-disk") {
-            XCTAssertNoThrow(try gate.run(on: "not-a-disk") {})
+        for identifier in ["not-a-disk", "disk4s1/dev/", ""] {
+            XCTAssertThrowsError(try gate.run(on: identifier) { XCTFail("Must not run") }) {
+                XCTAssertEqual($0 as? DiskOperationError, .invalidIdentifier(identifier))
+            }
+        }
+    }
+
+    func testNormalizedIdentifierStripsOnlyLeadingDevPrefix() {
+        let cases: [(String, String?)] = [
+            ("disk4", "disk4"), ("disk4s1", "disk4s1"), ("/dev/disk4s1", "disk4s1"), ("disk4s1s2", "disk4s1s2"),
+            ("disk4s1/dev/", nil), ("/dev//dev/disk4", nil), ("/dev/rdisk4", nil), ("rdisk4", nil),
+            ("x/dev/disk4", nil), ("/Volumes/USB", nil), ("disk4 ", nil), ("", nil),
+        ]
+        for (input, expected) in cases {
+            XCTAssertEqual(DiskOperationGate.normalizedIdentifier(input), expected, input)
         }
     }
 

@@ -51,8 +51,18 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
         reply(HelperConstants.protocolVersion)
     }
 
-    private func partition(for deviceIdentifier: String) throws -> DiskPartition {
-        let id = deviceIdentifier.replacingOccurrences(of: "/dev/", with: "")
+    /// Identificador recibido del cliente en su forma única (sin "/dev/"
+    /// inicial, disk<N>(s<N>)*): el mismo valor va a la reserva del disco y a
+    /// la operación.
+    private static func normalized(_ identifier: String) throws -> String {
+        guard let id = DiskOperationGate.normalizedIdentifier(identifier) else {
+            throw DiskOperationError.invalidIdentifier(identifier)
+        }
+        return id
+    }
+
+    /// `id` ya normalizado.
+    private func partition(for id: String) throws -> DiskPartition {
         guard let part = try DiskLister.externalDisks()
             .flatMap(\.partitions)
             .first(where: { $0.deviceIdentifier == id }) else {
@@ -65,7 +75,8 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
                 reply: @escaping (Bool, String, String?) -> Void) {
         requests.note()
         do {
-            let part = try partition(for: deviceIdentifier)
+            let id = try Self.normalized(deviceIdentifier)
+            let part = try partition(for: id)
             let detection = try FilesystemDetector.detect(devicePath: part.devicePath)
             reply(true, detection.filesystem.displayName, detection.label)
         } catch {
@@ -77,8 +88,9 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
                reply: @escaping (Bool, String) -> Void) {
         requests.note()
         do {
-            let result = try diskGate.run(on: deviceIdentifier) {
-                let part = try partition(for: deviceIdentifier)
+            let id = try Self.normalized(deviceIdentifier)
+            let result = try diskGate.run(on: id) {
+                let part = try partition(for: id)
                 let detection = try FilesystemDetector.detect(devicePath: part.devicePath)
                 return try Mounter.mount(partition: part, detection: detection, readOnly: readOnly)
             }
@@ -93,8 +105,9 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
     func unmount(target: String, reply: @escaping (Bool, String) -> Void) {
         requests.note()
         do {
-            let unmounted: String? = try diskGate.run(on: target) {
-                let part = try partition(for: target)
+            let id = try Self.normalized(target)
+            let unmounted: String? = try diskGate.run(on: id) {
+                let part = try partition(for: id)
                 // Orden: diskutil → mount(8) → derivado por etiqueta (FUSE-T).
                 guard let current = part.mountPoint
                     ?? Mounter.currentMountPoint(devicePath: part.devicePath)
@@ -105,7 +118,7 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
                 return current
             }
             guard let unmounted else {
-                reply(false, L10n.t("error.unmount.notMounted", target))
+                reply(false, L10n.t("error.unmount.notMounted", id))
                 return
             }
             reply(true, unmounted)
@@ -118,9 +131,10 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
                reply: @escaping (Bool, String) -> Void) {
         requests.note()
         do {
+            let id = try Self.normalized(deviceIdentifier)
             // La imagen se crea en nombre del usuario que lo pide y queda a su nombre.
-            try diskGate.run(on: deviceIdentifier) {
-                try Cloner.clone(wholeDisk: deviceIdentifier, to: imagePath, owner: caller, progress: { _ in })
+            try diskGate.run(on: id) {
+                try Cloner.clone(wholeDisk: id, to: imagePath, owner: caller, progress: { _ in })
             }
             reply(true, imagePath)
         } catch {
@@ -132,12 +146,13 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
                  reply: @escaping (Bool, String) -> Void) {
         requests.note()
         do {
+            let id = try Self.normalized(deviceIdentifier)
             // La imagen debe poder leerla el propio usuario que lo pide.
-            try diskGate.run(on: deviceIdentifier) {
-                try Cloner.restore(imagePath: imagePath, to: deviceIdentifier,
+            try diskGate.run(on: id) {
+                try Cloner.restore(imagePath: imagePath, to: id,
                                    requestedBy: caller, progress: { _ in })
             }
-            reply(true, deviceIdentifier)
+            reply(true, id)
         } catch {
             reply(false, Self.friendlyMessage(error))
         }
@@ -147,8 +162,9 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
                       reply: @escaping (Bool, String) -> Void) {
         requests.note()
         do {
-            let result = try diskGate.run(on: deviceIdentifier) {
-                let part = try partition(for: deviceIdentifier)
+            let id = try Self.normalized(deviceIdentifier)
+            let result = try diskGate.run(on: id) {
+                let part = try partition(for: id)
                 let detection = try FilesystemDetector.detect(devicePath: part.devicePath)
                 return try Mounter.makeNtfsWritable(partition: part, detection: detection)
             }
@@ -162,8 +178,9 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
                   reply: @escaping (Bool, String) -> Void) {
         requests.note()
         do {
-            let changed = try diskGate.run(on: deviceIdentifier) { () -> Bool in
-                let part = try partition(for: deviceIdentifier)
+            let id = try Self.normalized(deviceIdentifier)
+            let changed = try diskGate.run(on: id) { () -> Bool in
+                let part = try partition(for: id)
                 let detection = try FilesystemDetector.detect(devicePath: part.devicePath)
                 guard detection.extQuotaEnabled else { return false }
                 try Mounter.disableExtQuota(devicePath: part.devicePath)
@@ -183,8 +200,9 @@ final class HelperService: NSObject, OmnimountHelperProtocol {
             return
         }
         do {
-            let summary = try diskGate.run(on: deviceIdentifier) {
-                let part = try partition(for: deviceIdentifier)
+            let id = try Self.normalized(deviceIdentifier)
+            let summary = try diskGate.run(on: id) {
+                let part = try partition(for: id)
                 return try Formatter.format(partition: part, as: target, label: label)
             }
             reply(true, summary)
