@@ -191,30 +191,47 @@ public enum Mounter {
         }
     }
 
-    /// Opciones -o para fuse2fs/ntfs-3g. ntfs-3g separa las opciones por comas
-    /// sin admitir escapes, así que las comas del nombre de volumen se
-    /// sustituyen para que la etiqueta no pueda añadir opciones.
+    /// Opciones -o para fuse2fs/ntfs-3g. El nombre de volumen procede de la
+    /// etiqueta del disco: ntfs-3g separa las opciones por comas sin escapes
+    /// y fuse_opt (libfuse/FUSE-T) trata "\" como escape del carácter
+    /// siguiente, así que "," y "\" se sustituyen por "_" y se eliminan los
+    /// caracteres de control. volname va al final para que ningún nombre
+    /// pueda absorber las opciones que le siguen.
     static func fuseOptions(tool: ExternalTool, volname: String,
                             readOnly: Bool, forceWritable: Bool) -> [String] {
-        let volname = volname.replacingOccurrences(of: ",", with: "_")
         var options: [String]
         switch tool {
         case .fuse2fs:
             // local: Finder trata el volumen como disco local.
             // allow_other: visible para el usuario aunque monte root.
-            options = ["local", "allow_other", "volname=\(volname)"]
+            options = ["local", "allow_other"]
         case .ntfs3g:
             // windows_names: evita crear nombres inválidos para Windows.
             // big_writes mejora el rendimiento de escritura.
-            options = ["local", "allow_other", "volname=\(volname)", "windows_names", "big_writes"]
+            options = ["local", "allow_other", "windows_names", "big_writes"]
             // remove_hiberfile: monta en escritura un NTFS que Windows dejó
             // hibernado (Inicio rápido), descartando la sesión suspendida.
             if forceWritable { options.append("remove_hiberfile") }
         default:
-            options = []
+            return []
         }
         if readOnly { options.append("ro") }
+        let name = sanitizedVolumeName(volname)
+        // Sin nombre utilizable, la capa FUSE usa su nombre por defecto.
+        if !name.isEmpty { options.append("volname=\(name)") }
         return options
+    }
+
+    static func sanitizedVolumeName(_ name: String) -> String {
+        var scalars = String.UnicodeScalarView()
+        for scalar in name.unicodeScalars {
+            switch scalar {
+            case ",", "\\": scalars.append("_")
+            case _ where scalar.properties.generalCategory == .control: continue
+            default: scalars.append(scalar)
+            }
+        }
+        return String(scalars)
     }
 
     /// mkdir permite distinguir atómicamente un directorio creado por esta

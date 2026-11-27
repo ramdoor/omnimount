@@ -161,10 +161,60 @@ final class MounterTests: XCTestCase {
             XCTAssertTrue(options.contains("volname=x_remove_hiberfile_ro"), "\(tool): \(options)")
         }
         XCTAssertEqual(Mounter.fuseOptions(tool: .ntfs3g, volname: "DATA", readOnly: true, forceWritable: true),
-                       ["local", "allow_other", "volname=DATA", "windows_names", "big_writes",
-                        "remove_hiberfile", "ro"])
+                       ["local", "allow_other", "windows_names", "big_writes",
+                        "remove_hiberfile", "ro", "volname=DATA"])
         XCTAssertEqual(Mounter.fuseOptions(tool: .fuse2fs, volname: "LINUX", readOnly: false, forceWritable: false),
                        ["local", "allow_other", "volname=LINUX"])
+    }
+
+    /// Divide una cadena -o como fuse_opt: "\" escapa el carácter siguiente
+    /// y "," separa opciones (comprobado con libfuse-t 1.2.9).
+    private func fuseOptSplit(_ joined: String) -> [String] {
+        var options: [String] = [], current = "", escaped = false
+        for character in joined {
+            if escaped { current.append(character); escaped = false }
+            else if character == "\\" { escaped = true }
+            else if character == "," { options.append(current); current = "" }
+            else { current.append(character) }
+        }
+        if escaped { current.append("\\") }
+        options.append(current)
+        return options
+    }
+
+    func testBackslashAndControlCharactersInVolnameCannotAbsorbOptions() {
+        let labels = ["x\\", "a\\,b", "line\nbreak", "tab\there\u{7F}", "a\\b"]
+        for tool in [ExternalTool.fuse2fs, .ntfs3g] {
+            let expected = Mounter.fuseOptions(tool: tool, volname: "NAME", readOnly: true, forceWritable: false)
+            for label in labels {
+                let options = Mounter.fuseOptions(tool: tool, volname: label, readOnly: true, forceWritable: false)
+                let parsed = fuseOptSplit(options.joined(separator: ","))
+                XCTAssertTrue(parsed.contains("ro"), "\(tool) \(label.debugDescription): \(parsed)")
+                XCTAssertEqual(parsed.count, expected.count, "\(tool) \(label.debugDescription): \(parsed)")
+                XCTAssertEqual(parsed.filter { !$0.hasPrefix("volname=") }, expected.filter { !$0.hasPrefix("volname=") },
+                               "\(tool) \(label.debugDescription): \(parsed)")
+                let volname = parsed.first { $0.hasPrefix("volname=") } ?? ""
+                XCTAssertFalse(volname.contains { $0 == "\\" || $0 == "," || $0.isNewline },
+                               "\(tool) \(label.debugDescription): \(volname.debugDescription)")
+                XCTAssertFalse(volname.unicodeScalars.contains { $0.properties.generalCategory == .control },
+                               "\(tool) \(label.debugDescription): \(volname.debugDescription)")
+            }
+        }
+        XCTAssertTrue(Mounter.fuseOptions(tool: .fuse2fs, volname: "x\\", readOnly: false, forceWritable: false)
+                        .contains("volname=x_"))
+        XCTAssertTrue(Mounter.fuseOptions(tool: .fuse2fs, volname: "a\\,b", readOnly: false, forceWritable: false)
+                        .contains("volname=a__b"))
+        XCTAssertTrue(Mounter.fuseOptions(tool: .fuse2fs, volname: "line\nbreak", readOnly: false, forceWritable: false)
+                        .contains("volname=linebreak"))
+        XCTAssertEqual(Mounter.fuseOptions(tool: .fuse2fs, volname: "\n\t", readOnly: true, forceWritable: false),
+                       ["local", "allow_other", "ro"])
+    }
+
+    func testOrdinaryVolnamesAreUnchanged() {
+        for label in ["My Disk", "Fotos Año 2024", "データ", "Резерв", "v1.2-final_copy", "...", "a=b"] {
+            XCTAssertTrue(Mounter.fuseOptions(tool: .ntfs3g, volname: label, readOnly: false, forceWritable: false)
+                            .contains("volname=\(label)"), label)
+        }
     }
 
     func testReadOnlyExtMountSkipsRepairAndToolLookup() throws {
