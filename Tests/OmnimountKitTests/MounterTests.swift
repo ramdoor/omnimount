@@ -485,4 +485,32 @@ final class MounterTests: XCTestCase {
     private func result(_ status: Int32) -> ShellResult {
         ShellResult(exitCode: status, stdout: "diagnostic output", stderr: "")
     }
+
+    // MARK: - Punto de montaje derivado (FUSE-T)
+
+    func testDerivedMountPointRequiresFuseTSource() {
+        let candidate = "/Volumes/LINUX"
+        let cases: [(isMountPoint: Bool, source: String?, expected: String?)] = [
+            (true, "fuse-t:/LINUX", candidate),
+            (true, "//user@server/share", nil),
+            (true, "/dev/disk5s1", nil),
+            (true, nil, nil),
+            (false, "fuse-t:/LINUX", nil),
+        ]
+        for item in cases {
+            XCTAssertEqual(Mounter.fuseTMountPoint(candidate,
+                                                   isMountPoint: { _ in item.isMountPoint },
+                                                   mountSource: { _ in item.source }),
+                           item.expected, String(describing: item))
+        }
+    }
+
+    func testMountSourceReadsTheMountedFilesystem() throws {
+        let root = try XCTUnwrap(Mounter.mountSource("/"))
+        XCTAssertFalse(root.isEmpty)
+        XCTAssertFalse(root.hasPrefix("fuse-t:"))
+        XCTAssertNil(Mounter.mountSource(directory.appendingPathComponent("missing").path))
+        // Una carpeta normal no es un punto de montaje.
+        XCTAssertNil(Mounter.fuseTMountPoint(directory.path))
+    }
 }
